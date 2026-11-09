@@ -39,7 +39,7 @@ Key conclusions that drive the backend design:
 9. **Contract names diverge per module** (`/client` vs `/clients`, `/product` vs `/products`, `/invoices/:id/pdf` vs `/invoices/:id/export/pdf`, `/invoices/:id/pay` vs `/invoices/:id/payment`, `/subscription` vs `/subscriptions`, `/reports/*` only partly implemented). These are catalogued as IC-xx conflicts with an explicit resolution per item.
 10. **Build safety net is off.** `next.config.ts` sets `typescript.ignoreBuildErrors: true`; `next-intl`, `@tanstack/react-query`, `socket.io-client`, `axios` and `xlsx` are installed but effectively unused (Axios only in `api.service.ts`, which is unused; react-query only imported in `NotificationBell`). The audit therefore cannot rely on "it compiles" as evidence of correctness.
 
-Severity roll-up: **7 blocking issues (P0)**, **18 contract mismatches (P1)**, **22 quality/UX issues (P2)**, plus hygiene items. Details in §14.
+Severity roll-up: **7 blocking issues (P0)**, **15 contract/behaviour issues (P1)**, **22 quality/UX issues (P2)**, plus hygiene items. Details in §14.
 
 ---
 
