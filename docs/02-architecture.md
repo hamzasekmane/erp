@@ -1170,3 +1170,19 @@ Phase 2 is **complete as a design**. Before implementation, the following must b
 Q-06 (`/auth/me` — yes, additive), Q-10 (group colour as semantic key), Q-16 (in-app notifications only), Q-19 (branding "Velora" in documents), Q-23 (`/reports/*` kept), Q-24 (real application metrics).
 
 > **No implementation will start until you confirm (or amend) the blocking list above.** After confirmation, Phase 3 begins with the monorepo, database schema and identity/tenancy modules, following the exit criteria in §17.
+
+---
+
+## 20. Statut d'implémentation (ajout post-validation)
+
+La phase 3 a démarré après confirmation des décisions bloquantes (tous les modules, devise par tenant,
+PostgreSQL mono-schéma). Le code vit désormais dans `server/` et les écarts assumés par rapport au présent
+document sont consignés dans [`03-backend-implementation.md`](./03-backend-implementation.md) §3 :
+
+- ORM **Drizzle** au lieu de Prisma (compatibilité PGlite, migrations SQL lisibles) ;
+- hachage **scrypt** au lieu d'Argon2id (aucune dépendance native) ;
+- access token **60 min** au lieu de 15 min (pas encore d'intercepteur de refresh côté Next.js) ;
+- politique de mot de passe **8 caractères** (contrainte des formulaires existants) ;
+- exposition simultanée `/api` et `/api/v1` (URL configurée côté frontend vs contrat documenté).
+
+Le contrat machine est généré dans [`openapi.json`](./openapi.json) (78 chemins) par `npm run openapi`.
