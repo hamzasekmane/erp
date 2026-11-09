@@ -1,0 +1,17 @@
+{
+  "Login": {
+    "title": "Welcome Back",
+    "subtitle": "Sign in to access your dashboard",
+    "noAccount": "Don't have an account?",
+    "createNewAccount": "Create an account",
+    "footerNotice": "Make sure to use your registered email to access your workspace"
+  },"Navbar": {
+    "features": "Features",
+    "login": "Log in",
+    "getStarted": "Get Started"
+  },
+  "Hero": {
+    "title": "Invest at the <br /> perfect time.",
+    "description": "By leveraging insights from our network of industry insiders, you'll know exactly when to buy to maximize profit."
+  }
+}

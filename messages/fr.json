@@ -1,0 +1,11 @@
+{
+  "Navbar": {
+    "features": "Fonctionnalités",
+    "login": "Connexion",
+    "getStarted": "Commencer"
+  },
+  "Hero": {
+    "title": "Investissez au <br /> moment idéal.",
+    "description": "Grâce aux informations de notre réseau d'experts, vous saurez exactement quand acheter pour maximiser vos profits."
+  }
+}

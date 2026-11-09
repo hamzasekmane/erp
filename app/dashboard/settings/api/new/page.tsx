@@ -1,0 +1,54 @@
+import { Metadata } from "next";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Key,
+  Shield,
+  Eye,
+  EyeOff,
+  Copy,
+  CheckCircle,
+  AlertCircle
+} from "lucide-react";
+import { CreateApiKeyForm } from "../CreateApiKeyForm";
+
+export const metadata: Metadata = {
+  title: "Velora ERP | Nouvelle clé API",
+  description: "Créez une nouvelle clé API",
+};
+
+export default async function NewApiKeyPage() {
+  return (
+    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+      
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Link
+          href="/dashboard/settings/api"
+          className="p-2 hover:bg-[var(--accent)]/10 rounded-xl transition-colors group"
+        >
+          <ArrowLeft size={20} className="text-[var(--foreground-muted)] group-hover:text-[var(--accent)]" />
+        </Link>
+        <div className="p-2 bg-gradient-to-br from-indigo-500/20 to-indigo-500/5 rounded-xl">
+          <Key size={20} className="text-indigo-500" />
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500">
+              VELORA • API
+            </span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-black text-[var(--foreground)] tracking-tighter">
+            Nouvelle <span className="text-indigo-500">clé API</span>
+          </h1>
+          <p className="text-xs text-[var(--foreground-muted)] font-mono">
+            Créez une nouvelle clé d'accès à l'API
+          </p>
+        </div>
+      </div>
+
+      {/* Form */}
+      <CreateApiKeyForm />
+    </div>
+  );
+}
