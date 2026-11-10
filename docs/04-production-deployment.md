@@ -232,8 +232,23 @@ L'image Docker du frontend est fournie (`Dockerfile` à la racine, sortie `stand
 - **TypeScript : 0 erreur.** `next build` est bloquant en cas d'erreur de type et `tsc --noEmit` est
   exécuté en CI. Les 69 erreurs historiques ont été corrigées (typages des actions, réponses API,
   props de composants, export analytique, notes client).
-- Certains écrans (RH, support, archives, analytics) tournent encore sur des données statiques et ne
-  consomment pas les endpoints correspondants.
+- **Écrans métier connectés à l'API** (plus de tableaux codés en dur) :
+  - RH : employés (liste / création / suppression), congés (liste + décision), présences, paie,
+    contrats, départements (liste / création / suppression).
+  - Support : tickets récents chargés depuis `/support/tickets`, formulaire de création relié à
+    `POST /support/tickets`.
+  - Archives : `/archives/stats` + `/archives/documents`, avec filtrage par catégorie
+    (`client`, `invoice`, `product`, `contract`).
+  - Analytics : les normaliseurs consomment désormais l'enveloppe `{ success, data }` du backend ;
+    l'écran d'export produit un vrai CSV via `GET /reports/export?type=…&format=csv`.
+- **Correction critique de résolution d'URL** : les services partagés utilisaient
+  `NEXT_PUBLIC_API_URL` (valeur relative `/api`) côté serveur, ce qui rendait la totalité du
+  dashboard inaccessible en production (`Failed to parse URL`, redirection `/login`). Un helper
+  `app/lib/apiBase.ts` résout désormais la base API : `API_INTERNAL_URL`, sinon `API_PROXY_TARGET`,
+  sinon l'origine locale. `API_INTERNAL_URL` est optionnel en Docker (`API_PROXY_TARGET` suffit).
+- Reste à traiter : les sous-écrans analytics « KPI / prévisions / benchmark / pivot » affichent
+  encore des séries de démonstration (le backend n'expose pas encore ces agrégats), et l'export CSV
+  du backend ne distingue pas encore tous les types de rapport (seul `clients` diffère de `sales`).
 - Les littéraux d'URL corrompus relevés dans l'audit initial ont été vérifiés : les services actuels
   pointent bien vers `/client-groups`, `/api-keys` et `/reports/*`.
 

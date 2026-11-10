@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { exportAnalyticsData } from '@/app/actions/analytics.actions';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -47,7 +48,7 @@ interface ExportJob {
 
 export default function DataExportPage() {
   const [selectedDataType, setSelectedDataType] = useState('sales');
-  const [selectedFormat, setSelectedFormat] = useState('excel');
+  const [selectedFormat, setSelectedFormat] = useState('csv');
   const [dateRange, setDateRange] = useState('last30days');
   const [isExporting, setIsExporting] = useState(false);
   const [includeCharts, setIncludeCharts] = useState(false);
@@ -56,65 +57,60 @@ export default function DataExportPage() {
 
   // Data types available for export
   const dataTypes = [
-    { id: 'sales', name: 'Ventes', icon: ShoppingCart, count: 1247 },
-    { id: 'customers', name: 'Clients', icon: Users, count: 1842 },
-    { id: 'products', name: 'Produits', icon: Package, count: 234 },
-    { id: 'invoices', name: 'Factures', icon: FileText, count: 856 },
-    { id: 'payments', name: 'Paiements', icon: DollarSign, count: 1247 },
-    { id: 'analytics', name: 'Analytiques', icon: BarChart3, count: 5000 }
+    { id: 'sales', name: 'Ventes', icon: ShoppingCart },
+    { id: 'clients', name: 'Clients', icon: Users },
+    { id: 'products', name: 'Produits', icon: Package },
+    { id: 'payments', name: 'Paiements', icon: DollarSign },
+    { id: 'aging', name: 'Créances', icon: BarChart3 }
   ];
 
-  // Export formats
+  // Export formats — the API currently generates CSV exports only.
   const exportFormats: ExportFormat[] = [
-    { id: 'excel', name: 'Excel', icon: FileSpreadsheet, extension: '.xlsx', description: 'Format Excel avec mise en forme' },
-    { id: 'csv', name: 'CSV', icon: FileText, extension: '.csv', description: 'Compatible avec tous les tableurs' },
-    { id: 'json', name: 'JSON', icon: FileJson, extension: '.json', description: 'Pour intégration API' },
-    { id: 'pdf', name: 'PDF', icon: FileArchive, extension: '.pdf', description: 'Rapport formaté' }
+    { id: 'csv', name: 'CSV', icon: FileText, extension: '.csv', description: 'Compatible avec tous les tableurs' }
   ];
 
   // Export history
-  const exportHistory: ExportJob[] = [
-    {
-      id: '1',
-      name: 'export_ventes_2024_01_15.xlsx',
-      type: 'Ventes',
-      format: 'Excel',
-      status: 'completed',
-      size: '2.4 MB',
-      createdAt: '2024-01-15 14:30:00',
-      downloadUrl: '#'
-    },
-    {
-      id: '2',
-      name: 'clients_data_2024_01_10.csv',
-      type: 'Clients',
-      format: 'CSV',
-      status: 'completed',
-      size: '856 KB',
-      createdAt: '2024-01-10 09:15:00',
-      downloadUrl: '#'
-    },
-    {
-      id: '3',
-      name: 'products_export.json',
-      type: 'Produits',
-      format: 'JSON',
-      status: 'pending',
-      size: '-',
-      createdAt: '2024-01-20 11:00:00'
-    }
-  ];
+  const [exportHistory, setExportHistory] = useState<ExportJob[]>([]);
 
   const handleExport = async () => {
     setIsExporting(true);
-    // Simulate export process
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsExporting(false);
-    alert(`Export ${dataTypes.find(d => d.id === selectedDataType)?.name} en ${exportFormats.find(f => f.id === selectedFormat)?.name} terminé!`);
+    try {
+      const result = await exportAnalyticsData(selectedDataType, dateRange);
+      if (!result.success || !result.data) {
+        alert(result.message || "Export impossible");
+        return;
+      }
+
+      const blob = new Blob([result.data], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = result.filename || "export.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+
+      const formatName = exportFormats.find(f => f.id === selectedFormat)?.name ?? "CSV";
+      setExportHistory(prev => [{
+        id: String(Date.now()),
+        name: result.filename || "export.csv",
+        type: dataTypes.find(d => d.id === selectedDataType)?.name ?? "Ventes",
+        format: formatName,
+        status: 'completed' as const,
+        size: `${Math.max(1, Math.round(blob.size / 1024))} KB`,
+        createdAt: new Date().toLocaleString('fr-FR'),
+        downloadUrl: '#',
+      }, ...prev]);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Export impossible");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleScheduleExport = () => {
-    alert('Export programmé quotidiennement à 02:00');
+    alert("La planification automatique des exports n'est pas encore disponible.");
   };
 
   const getStatusIcon = (status: string) => {
@@ -190,7 +186,6 @@ export default function DataExportPage() {
                     >
                       <Icon size={20} className={selectedDataType === type.id ? 'text-green-500' : 'text-[var(--foreground-muted)]'} />
                       <p className="text-sm font-medium mt-2">{type.name}</p>
-                      <p className="text-[10px] text-[var(--foreground-muted)]">{type.count.toLocaleString()} enregistrements</p>
                     </button>
                   );
                 })}
@@ -338,8 +333,8 @@ export default function DataExportPage() {
                   <span className="font-medium">{exportFormats.find(f => f.id === selectedFormat)?.name}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-[var(--foreground-muted)]">Taille estimée:</span>
-                  <span className="font-medium">{Math.floor(dataTypes.find(d => d.id === selectedDataType)?.count || 0 / 100)} MB</span>
+                  <span className="text-[var(--foreground-muted)]">Contenu:</span>
+                  <span className="font-medium">Export CSV généré à la demande</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--foreground-muted)]">Colonnes:</span>
