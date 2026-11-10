@@ -30,6 +30,8 @@ export const gatewaySchema = z.object({
   name: z.string().min(2).max(80),
   isActive: z.boolean().optional(),
   config: z.record(z.string(), z.string()).optional(),
+  /** Write-only credentials (e.g. `secret_key`). Stored encrypted, never returned. */
+  secrets: z.record(z.string().min(1).max(40), z.string().min(1).max(2000)).optional(),
 });
 
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;

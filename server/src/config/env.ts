@@ -41,6 +41,12 @@ const schema = z.object({
   // Uploads
   UPLOAD_DIR: z.string().default("uploads"),
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).default(10),
+  // Payments — Chargily Pay (Algeria: EDAHABIA / CIB)
+  APP_PUBLIC_URL: z.string().optional().default(""),
+  CHARGILY_MODE: z.enum(["test", "live"]).default("test"),
+  CHARGILY_SECRET_KEY: z.string().optional().default(""),
+  CHARGILY_WEBHOOK_URL: z.string().optional().default(""),
+  SECRETS_ENCRYPTION_KEY: z.string().optional().default(""),
   // Scheduled maintenance
   MAINTENANCE_INTERVAL_MS: z.coerce.number().int().min(0).default(6 * 60 * 60 * 1000),
   MAINTENANCE_DISABLED: bool,
@@ -64,6 +70,17 @@ if (isProd) {
   if (env.JWT_SECRET.startsWith("dev-only")) productionProblems.push("JWT_SECRET must be set to a strong random value");
   if (!env.DATABASE_URL) productionProblems.push("DATABASE_URL is required (the embedded PGlite database is for development only)");
   if (env.CORS_ORIGINS.trim() === "" || env.CORS_ORIGINS.includes("*")) productionProblems.push("CORS_ORIGINS must list explicit origins");
+  if (env.CHARGILY_SECRET_KEY) {
+    if (env.CHARGILY_MODE === "live" && !env.CHARGILY_SECRET_KEY.startsWith("live_")) {
+      productionProblems.push("CHARGILY_SECRET_KEY must be a live key when CHARGILY_MODE=live");
+    }
+    if (env.CHARGILY_MODE === "test" && !env.CHARGILY_SECRET_KEY.startsWith("test_")) {
+      productionProblems.push("CHARGILY_SECRET_KEY must be a test key when CHARGILY_MODE=test");
+    }
+    if (!env.SECRETS_ENCRYPTION_KEY) {
+      productionProblems.push("SECRETS_ENCRYPTION_KEY is required to store payment gateway credentials");
+    }
+  }
   if (env.SMTP_URL === "" && env.MAIL_OUTBOX_DIR.startsWith(".data")) {
     // Not fatal: the outbox keeps messages until SMTP is configured.
     console.warn("[config] SMTP_URL is empty: e-mails will be queued to MAIL_OUTBOX_DIR instead of being delivered.");

@@ -269,9 +269,66 @@ L'image Docker du frontend est fournie (`Dockerfile` à la racine, sortie `stand
 - Non couvert : aucun test automatisé de rendu visuel (pas de navigateur headless dans l'environnement
   de CI) ; la validation responsive reste manuelle.
 
+## 12 ter. Paiement en ligne — Chargily Pay (CIB / EDAHABIA)
+
+Intégration **pay-v2** de [Chargily](https://dev.chargily.com/pay-v2) pour régler une facture
+existante par carte CIB ou carte EDAHABIA (Algérie Poste), en dinars algériens.
+
+**Configuration**
+
+1. `SECRETS_ENCRYPTION_KEY` (openssl rand -hex 32) doit être défini dès qu'une clé de passerelle est
+   stockée : les secrets sont chiffrés en **AES-256-GCM** (`server/src/shared/security/secrets.ts`)
+   avant insertion dans `payment_gateway_secrets`. Sans clé, l'enregistrement renvoie
+   `SECRETS_KEY_MISSING`.
+2. Paramètres → Paiement → carte **Chargily Pay** : choisir l'environnement (`test` / `live`) et coller
+   la clé secrète (`test_sk_…` ou `live_sk_…`). La carte affiche l'URL de webhook à déclarer dans le
+   tableau de bord Chargily : `{APP_PUBLIC_URL}/api/payments/chargily/webhook`.
+3. Repli plateforme possible via `CHARGILY_SECRET_KEY` / `CHARGILY_MODE` : une clé de tenant
+   enregistrée en base est toujours prioritaire. `CHARGILY_WEBHOOK_URL` force l'`webhook_endpoint`
+   sur chaque checkout.
+
+**Flux**
+
+| Étape | Endpoint | Comportement |
+| --- | --- | --- |
+| Création | `POST /api/payments/chargily/checkouts` `{invoiceId, amount?, method?, locale?}` | Vérifie la facture (brouillon/annulée/soldée refusées), crée le checkout v2, stocke `gateway_checkouts`, renvoie `checkoutUrl` → redirection. |
+| Retour client | `GET /dashboard/invoices/{id}?payment=success` | Le serveur appelle `POST /api/payments/chargily/invoices/{id}/refresh` : **revérification du statut auprès de Chargily**, jamais confiance au redirect. |
+| Webhook | `POST /api/payments/chargily/webhook` (public) | Signature `signature` = HMAC-SHA256 **hex** du corps brut, comparée en temps constant. Absente → 403, invalide → 403. |
+| Suivi | `GET /api/payments/chargily/checkouts`, `GET /api/payments/chargily/status` | Historique et état de configuration (clé présente, mode, source). |
+
+**Règles de règlement**
+
+- Seul `checkout.paid` solde la facture. Les événements `failed|canceled|expired` ne touchent qu'au
+  statut du checkout.
+- **Idempotence** : un checkout déjà `paid` répond `{alreadySettled: true}` ; le webhook et la
+  revérification active peuvent arriver dans n'importe quel ordre.
+- **Contrôle de montant** : le montant renvoyé par Chargily doit égaler celui stocké à la création, sinon
+  statut `amount_mismatch`, erreur journalisée, aucun paiement créé.
+- **Arrondi dinarique** : Chargily n'accepte que des dinars entiers. Le solde est arrondi **au dinar
+  supérieur** (786 pour 785,40 DA) pour qu'un paiement complet solde toujours la facture ; le montant
+  alloué est plafonné au solde dû et l'écart (≤ 1 DA) est inscrit dans les notes du paiement.
+- Le paiement est créé par `PaymentsService.create` (`userId: null`, `userAgent: chargily-webhook`),
+  référence = identifiant du checkout, méthode `EDAHABIA`/`CIB`. `INVOICE_ALREADY_PAID` est toléré
+  (autre moyen de paiement arrivé avant), les autres échecs passent le checkout en `reconcile_failed`.
+- Statuts possibles : `pending | paid | failed | canceled | expired | amount_mismatch | reconcile_failed`.
+
+**Vérifications exécutées** (pglite local, clé `test_sk_demo_secret_123`)
+
+- `GET /api/payments/chargily/status` → `{configured:true, mode:"test", source:"tenant", secretsEncryption:true}`.
+- Webhook sans signature → `403 INVALID_SIGNATURE` ; signature erronée → `403`.
+- `checkout.paid` signé (1309 DA) → `200 {status:"paid"}` ; facture `FA-2026-0003` passe à `paid`,
+  un seul paiement `PAY-2026-0005` (EDAHABIA, réf. `ch_test_0001`).
+- Rejeu du même événement → `200 {alreadySettled:true}`, aucun doublon.
+- Montant erroné (500 au lieu de 786) → `{status:"amount_mismatch"}`, aucun paiement ; montant correct
+  → facture `FA-2026-0002` soldée avec note « arrondi dinarique de 0.6 DZD ».
+- `createCheckout` sans réseau sortant (sandbox) → `400 PAYMENT_PROVIDER_ERROR` (échec propre, pas de
+  crash) ; facture déjà soldée → `422 INVOICE_ALREADY_PAID`.
+
 ## 13. Limites connues avant une ouverture publique large
 
-- Aucune intégration PSP réelle (encaissement en ligne) : les passerelles sont configurables mais inactives.
+- Chargily Pay est intégré et vérifié en mode test local (webhook signé + revérification) mais aucun
+  aller-retour réel avec le tableau de bord Chargily n'a été exécuté depuis cet environnement (pas de
+  sortie réseau) : la recette doit être refaite en staging avec une vraie clé `test_sk_…`.
 - Superadmin authentifié sur le tenant « platform » : MFA et séparation réseau restent à ajouter.
 - Pas d'antivirus sur les uploads, pas de quota de stockage par formule.
 - Limiteur de débit en mémoire (par instance) et outbox mono-worker.

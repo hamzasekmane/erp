@@ -1,9 +1,10 @@
 import { OpenApiGeneratorV31, OpenAPIRegistry, extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
+import { createCheckoutSchema } from "../modules/payments/chargily/chargily.schema";
 import { createClientSchema, updateClientSchema } from "../modules/clients/clients.dto";
 import { createProductSchema, createCategorySchema, createTaxSchema } from "../modules/catalog/catalog.dto";
 import { createInvoiceSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
-import { createPaymentSchema, refundSchema } from "../modules/payments/payments.dto";
+import { createPaymentSchema, gatewaySchema, refundSchema } from "../modules/payments/payments.dto";
 import { forgotPasswordSchema, loginSchema, refreshSchema, registerSchema, resetPasswordSchema } from "../modules/auth/auth.dto";
 import { changePasswordSchema, createUserSchema, updateUserSchema } from "../modules/users/users.dto";
 import { changeSubscriptionSchema, updateSecuritySchema, updateSettingsSchema, updateTenantSchema } from "../modules/tenancy/tenancy.dto";
@@ -153,6 +154,15 @@ register("post", "/payments/:id/refund", "Payments", "Rembourser", { body: refun
 register("patch", "/payments/:id/reconcile", "Payments", "Rapprocher", { params: idParams });
 register("get", "/payments/settings/gateways", "Payments", "Passerelles de paiement");
 register("get", "/payments/settings/methods", "Payments", "Moyens de paiement");
+register("post", "/payments/settings/gateways/setup", "Payments", "Configurer une passerelle (secret chiffré)", { body: gatewaySchema });
+
+/* chargily pay v2 (CIB / EDAHABIA) */
+register("get", "/payments/chargily/status", "Chargily", "État de la configuration Chargily");
+register("post", "/payments/chargily/checkouts", "Chargily", "Créer un checkout pour une facture", { body: createCheckoutSchema });
+register("get", "/payments/chargily/checkouts", "Chargily", "Historique des checkouts");
+register("post", "/payments/chargily/checkouts/:id/refresh", "Chargily", "Revérifier un checkout auprès de Chargily", { params: idParams });
+register("post", "/payments/chargily/invoices/:invoiceId/refresh", "Chargily", "Revérifier les checkouts d'une facture");
+register("post", "/payments/chargily/webhook", "Chargily", "Webhook signé Chargily (HMAC-SHA256)", { security: false });
 
 /* dashboard + reports */
 register("get", "/dashboard/stats", "Dashboard", "Statistiques du tableau de bord");

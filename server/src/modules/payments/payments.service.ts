@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import {
@@ -7,12 +7,14 @@ import {
   invoiceStatusHistory,
   invoices,
   paymentAllocations,
+  paymentGatewaySecrets,
   paymentGateways,
   paymentMethods,
   paymentRefunds,
   payments,
 } from "../../db/schema";
 import { audit } from "../../shared/audit";
+import { secretsConfigured, encryptSecret } from "../../shared/security/secrets";
 import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
@@ -20,7 +22,13 @@ import { fromMinor, toMinor } from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
 import type { CreatePaymentInput, GatewayInput, RefundInput, UpdatePaymentInput } from "./payments.dto";
 
-type Ctx = { tenantId: string; userId: string; ip?: string | null; userAgent?: string | null };
+type Ctx = { tenantId: string; userId: string | null; ip?: string | null; userAgent?: string | null };
+
+/** Postgres unique-violation on the human-readable document number. */
+function isNumberCollision(error: unknown): boolean {
+  const cause = (error as { cause?: { code?: string; constraint?: string } }).cause ?? (error as { code?: string; constraint?: string });
+  return cause?.code === "23505" && (cause.constraint ?? "").includes("number");
+}
 
 type PaymentListQuery = {
   page: number;
@@ -154,13 +162,13 @@ export class PaymentsService {
     }
 
     const paymentId = newId();
-    const number = await documentNumber(ctx.tenantId, "payment", "PAY");
+    let number = await documentNumber(ctx.tenantId, "payment", "PAY");
     const paidAt = input.paidAt ? new Date(input.paidAt) : new Date();
     const nextPaid = Number(invoice.paidMinor) + amountMinor;
     const nextDue = Number(invoice.totalMinor) - nextPaid;
     const nextStatus = nextDue <= 0 ? "paid" : "partially_paid";
 
-    await db.transaction(async (tx) => {
+    const writePayment = async () => db.transaction(async (tx) => {
       await tx.insert(payments).values({
         id: paymentId,
         tenantId: ctx.tenantId,
@@ -195,6 +203,21 @@ export class PaymentsService {
         reason: `Paiement ${number}`,
       });
     });
+
+    // Legacy/imported payments may not have advanced the sequence: retry with a
+    // fresh number instead of failing the whole settlement.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await writePayment();
+        break;
+      } catch (error) {
+        if (attempt < 3 && isNumberCollision(error)) {
+          number = await documentNumber(ctx.tenantId, "payment", "PAY");
+          continue;
+        }
+        throw error;
+      }
+    }
 
     await audit({
       tenantId: ctx.tenantId,
@@ -348,6 +371,13 @@ export class PaymentsService {
   async listGateways(ctx: Ctx) {
     const db = getDb();
     const rows = await db.select().from(paymentGateways).where(eq(paymentGateways.tenantId, ctx.tenantId));
+    const secrets = rows.length
+      ? await db
+          .select({ gatewayId: paymentGatewaySecrets.gatewayId })
+          .from(paymentGatewaySecrets)
+          .where(inArray(paymentGatewaySecrets.gatewayId, rows.map((row) => row.id)))
+      : [];
+    const configuredGateways = new Set(secrets.map((secret) => secret.gatewayId));
     return rows.map((row) => ({
       _id: row.id,
       id: row.id,
@@ -355,6 +385,7 @@ export class PaymentsService {
       name: row.name,
       isActive: row.isActive,
       config: sanitizeConfig(row.config),
+      configured: configuredGateways.has(row.id),
     }));
   }
 
@@ -370,17 +401,42 @@ export class PaymentsService {
         .update(paymentGateways)
         .set({ name: input.name, isActive: input.isActive ?? existing.isActive, config: { ...existing.config, ...(input.config ?? {}) }, updatedAt: new Date() })
         .where(eq(paymentGateways.id, existing.id));
+      await this.storeGatewaySecrets(existing.id, input.secrets);
       return this.listGateways(ctx);
     }
+    const gatewayId = newId();
     await db.insert(paymentGateways).values({
-      id: newId(),
+      id: gatewayId,
       tenantId: ctx.tenantId,
       code: input.code,
       name: input.name,
       isActive: input.isActive ?? false,
       config: input.config ?? {},
     });
+    await this.storeGatewaySecrets(gatewayId, input.secrets);
     return this.listGateways(ctx);
+  }
+
+  /** Encrypts and persists gateway credentials (never echoed back by the API). */
+  private async storeGatewaySecrets(gatewayId: string, secrets?: Record<string, string>) {
+    if (!secrets || Object.keys(secrets).length === 0) return;
+    if (!secretsConfigured()) {
+      throw new AppError(
+        "SECRETS_KEY_MISSING",
+        "SECRETS_ENCRYPTION_KEY n'est pas configurée : impossible d'enregistrer des identifiants de passerelle.",
+        400,
+      );
+    }
+    const db = getDb();
+    for (const [key, value] of Object.entries(secrets)) {
+      await db
+        .insert(paymentGatewaySecrets)
+        .values({ gatewayId, key, ciphertext: encryptSecret(value) })
+        .onConflictDoUpdate({
+          target: [paymentGatewaySecrets.gatewayId, paymentGatewaySecrets.key],
+          set: { ciphertext: encryptSecret(value), updatedAt: new Date() },
+        });
+    }
   }
 
   async toggleGateway(ctx: Ctx, id: string, isActive: boolean) {

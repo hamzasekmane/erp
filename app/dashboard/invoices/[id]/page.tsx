@@ -13,6 +13,8 @@ import { fr } from "date-fns/locale";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { updateInvoiceStatusAction } from "@/app/actions/invoiceActions";
+import { refreshInvoicePaymentsAction } from "@/app/actions/chargilyActions";
+import ChargilyPayPanel from "@/app/components/ChargilyPayPanel";
 
 // --- Types ---
 interface InvoiceItem {
@@ -39,10 +41,26 @@ interface InvoiceDetail {
   };
 }
 
-export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InvoiceDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ payment?: string }>;
+}) {
   const { id } = await params;
+  const { payment } = await searchParams;
   const cookieStore = await cookies();
   const token = cookieStore.get("token")?.value || "";
+
+  // 0. Retour depuis Chargily : on ne fait pas confiance au redirect, on
+  //    revérifie le statut côté serveur auprès du fournisseur.
+  let paymentFlash: "paid" | "pending" | "failed" | null = null;
+  if (payment === "failed") paymentFlash = "failed";
+  if (payment === "success") {
+    const check = await refreshInvoicePaymentsAction(id);
+    paymentFlash = check.status === "paid" ? "paid" : "pending";
+  }
 
   // 1. Récupération des données avec gestion d'erreur
   const response = await invoiceService.getInvoiceById(id, token);
@@ -110,6 +128,39 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <p className="font-black uppercase text-[12px] tracking-widest leading-none mb-1">Attention : Retard de paiement</p>
             <p className="text-[11px] font-bold opacity-70">
               Le paiement aurait dû être reçu le {format(new Date(invoice.dueDate), 'dd MMMM yyyy', { locale: fr })}.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 2bis. RETOUR DE LA PASSERELLE DE PAIEMENT */}
+      {paymentFlash && (
+        <div
+          className={`relative w-full p-5 sm:p-6 rounded-[2.5rem] border flex items-center gap-4 backdrop-blur-sm ${
+            paymentFlash === "paid"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+              : paymentFlash === "failed"
+                ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-500"
+          }`}
+        >
+          <div className="p-2.5 rounded-2xl bg-current/10">
+            {paymentFlash === "paid" ? <CheckCircle size={20} /> : <Clock size={20} />}
+          </div>
+          <div>
+            <p className="font-black uppercase text-[11px] tracking-widest leading-none mb-1">
+              {paymentFlash === "paid"
+                ? "Paiement confirmé"
+                : paymentFlash === "failed"
+                  ? "Paiement non abouti"
+                  : "Paiement en cours de vérification"}
+            </p>
+            <p className="text-[11px] font-bold opacity-70">
+              {paymentFlash === "paid"
+                ? "La facture a été soldée après vérification du statut auprès de Chargily."
+                : paymentFlash === "failed"
+                  ? "Aucun paiement n'a été enregistré. Vous pouvez réessayer."
+                  : "Chargily n'a pas encore confirmé la transaction. Actualisez la page dans quelques instants."}
             </p>
           </div>
         </div>
@@ -267,6 +318,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   </div>
                 </div>
                 
+                {invoice.status !== 'paid' && remainingBalance > 0 && (
+                  <ChargilyPayPanel invoiceId={invoice._id} amountDue={remainingBalance} />
+                )}
+
                 {invoice.status !== 'paid' ? (
                  <form action={handleQuickPay} className="w-full">
                    <QuickPayButton />

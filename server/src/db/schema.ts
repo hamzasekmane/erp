@@ -648,6 +648,32 @@ export const paymentGateways = pgTable(
   (t) => [uniqueIndex("payment_gateways_code_uq").on(t.tenantId, t.code)],
 );
 
+export const gatewayCheckouts = pgTable(
+  "gateway_checkouts",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("chargily"),
+    externalId: text("external_id").notNull(),
+    invoiceId: text("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    currency: text("currency").notNull().default("DZD"),
+    paymentMethod: text("payment_method"),
+    status: text("status").notNull().default("pending"),
+    checkoutUrl: text("checkout_url"),
+    mode: text("mode").notNull().default("test"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("gateway_checkouts_external_uq").on(t.provider, t.externalId),
+    index("gateway_checkouts_tenant_status_idx").on(t.tenantId, t.status, t.createdAt),
+  ],
+);
+
 export const paymentGatewaySecrets = pgTable(
   "payment_gateway_secrets",
   {

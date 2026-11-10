@@ -22,6 +22,13 @@
       "when": 1794268735329,
       "tag": "0002_platform",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794273875323,
+      "tag": "0003_cloudy_black_widow",
+      "breakpoints": true
     }
   ]
 }

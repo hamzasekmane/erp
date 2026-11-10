@@ -28,7 +28,8 @@ async function bootstrap() {
   expressApp.disable("x-powered-by");
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(compression());
-  app.use(express.json({ limit: "1mb" }));
+  // Keep the raw payload: payment webhooks are signed over the exact bytes.
+  app.use(express.json({ limit: "1mb", verify: (req, _res, buf) => { (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf); } }));
   app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
   app.setGlobalPrefix("api");

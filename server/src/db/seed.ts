@@ -254,7 +254,12 @@ async function seedDemo(demoPlanCode: string) {
     sequence += 1;
   }
 
-  await db.execute(sql`insert into number_sequences (tenant_id, doc_type, period, next_value) values (${tenantId}, 'invoice', ${String(now.getFullYear())}, ${sequence}) on conflict do nothing`);
+  const period = String(now.getFullYear());
+  // Invoice and payment numbers share the same counter in the demo data, so both
+  // sequences must be registered or the next generated number collides.
+  for (const docType of ["invoice", "payment"]) {
+    await db.execute(sql`insert into number_sequences (tenant_id, doc_type, period, next_value) values (${tenantId}, ${docType}, ${period}, ${sequence}) on conflict do nothing`);
+  }
   return tenantId;
 }
 
