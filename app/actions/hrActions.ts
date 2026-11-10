@@ -3,10 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-const API_URL =
-  process.env.API_INTERNAL_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:4000/api";
+import { apiBaseUrl } from "@/app/lib/apiBase";
 
 export interface HrEmployee {
   id: string;
@@ -42,7 +39,7 @@ async function hrRequest(path: string, init?: RequestInit) {
     return { ok: false, status: 401, body: { message: "Session expirée, reconnectez-vous." } as Record<string, unknown> };
   }
   try {
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${apiBaseUrl()}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -180,4 +177,184 @@ export async function employeesStatsAction(): Promise<{
 }> {
   const { ok, body } = await hrRequest("/hr/employees/stats");
   return { success: ok, stats: ok ? (body.data as never) : null };
+}
+
+/* ---------------------------------- Leaves --------------------------------- */
+
+export interface HrLeave {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  reason: string | null;
+}
+
+export async function listLeavesAction(params: { status?: string } = {}): Promise<{ success: boolean; leaves: HrLeave[]; message?: string }> {
+  const query = new URLSearchParams({ limit: "100", page: "1" });
+  if (params.status) query.set("status", params.status);
+  const { ok, body } = await hrRequest(`/hr/leaves?${query.toString()}`);
+  const rows = Array.isArray(body.data) ? (body.data as Record<string, unknown>[]) : [];
+  return {
+    success: ok,
+    message: ok ? undefined : String(body.message ?? "Impossible de charger les congés."),
+    leaves: rows.map((row) => ({
+      id: String(row.id ?? ""),
+      employeeId: String(row.employeeId ?? ""),
+      employeeName: String(row.employeeName ?? ""),
+      type: String(row.type ?? "annual"),
+      startDate: String(row.startDate ?? ""),
+      endDate: String(row.endDate ?? ""),
+      days: Number(row.days ?? 0),
+      status: (row.status as HrLeave["status"]) ?? "pending",
+      reason: (row.reason as string | null) ?? null,
+    })),
+  };
+}
+
+export async function createLeaveAction(input: { employeeId: string; type: string; startDate: string; endDate: string; days: number; reason?: string }): Promise<HrActionResult> {
+  const { ok, body } = await hrRequest("/hr/leaves", { method: "POST", body: JSON.stringify(input) });
+  if (ok) revalidatePath("/dashboard/hr/leaves");
+  return { success: ok, message: ok ? "Demande de congé enregistrée" : String(body.message ?? "Création impossible.") };
+}
+
+export async function decideLeaveAction(id: string, status: "approved" | "rejected" | "cancelled"): Promise<HrActionResult> {
+  const { ok, body } = await hrRequest(`/hr/leaves/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+  if (ok) revalidatePath("/dashboard/hr/leaves");
+  return { success: ok, message: ok ? "Demande mise à jour" : String(body.message ?? "Mise à jour impossible.") };
+}
+
+/* -------------------------------- Attendance ------------------------------- */
+
+export interface HrAttendance {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  status: string;
+}
+
+export async function listAttendanceAction(params: { date?: string } = {}): Promise<{ success: boolean; records: HrAttendance[]; message?: string }> {
+  const query = new URLSearchParams({ limit: "200", page: "1" });
+  if (params.date) query.set("date", params.date);
+  const { ok, body } = await hrRequest(`/hr/attendance?${query.toString()}`);
+  const rows = Array.isArray(body.data) ? (body.data as Record<string, unknown>[]) : [];
+  return {
+    success: ok,
+    message: ok ? undefined : String(body.message ?? "Impossible de charger les présences."),
+    records: rows.map((row) => ({
+      id: String(row.id ?? ""),
+      employeeId: String(row.employeeId ?? ""),
+      employeeName: String(row.employeeName ?? ""),
+      date: String(row.date ?? ""),
+      checkIn: (row.checkIn as string | null) ?? null,
+      checkOut: (row.checkOut as string | null) ?? null,
+      status: String(row.status ?? "present"),
+    })),
+  };
+}
+
+export async function markAttendanceAction(input: { employeeId: string; date: string; checkIn?: string; checkOut?: string; status?: string }): Promise<HrActionResult> {
+  const { ok, body } = await hrRequest("/hr/attendance", { method: "POST", body: JSON.stringify(input) });
+  if (ok) revalidatePath("/dashboard/hr/attendance");
+  return { success: ok, message: ok ? "Pointage enregistré" : String(body.message ?? "Pointage impossible.") };
+}
+
+/* --------------------------------- Payroll --------------------------------- */
+
+export interface HrPayrollLine {
+  employeeId: string;
+  name: string;
+  department: string | null;
+  baseSalary: number;
+  leaveDays: number;
+  deduction: number;
+  netSalary: number;
+}
+
+export async function payrollAction(month?: string): Promise<{
+  success: boolean;
+  month: string | null;
+  lines: HrPayrollLine[];
+  totals: { gross: number; net: number } | null;
+  message?: string;
+}> {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  const { ok, body } = await hrRequest(`/hr/payroll${query}`);
+  const data = body.data as
+    | { month?: string; lines?: HrPayrollLine[]; totalGross?: number; totalNet?: number }
+    | undefined;
+  return {
+    success: ok,
+    month: data?.month ?? null,
+    lines: Array.isArray(data?.lines) ? data!.lines : [],
+    totals: data ? { gross: Number(data.totalGross ?? 0), net: Number(data.totalNet ?? 0) } : null,
+    message: ok ? undefined : String(body.message ?? "Impossible de charger la paie."),
+  };
+}
+
+/* -------------------------------- Contracts -------------------------------- */
+
+export interface HrContract {
+  id: string;
+  employeeId: string;
+  type: string;
+  startDate: string;
+  endDate: string | null;
+  status: string;
+  salary?: number;
+}
+
+export async function listContractsAction(): Promise<{ success: boolean; contracts: HrContract[]; message?: string }> {
+  const { ok, body } = await hrRequest("/hr/contracts");
+  const rows = Array.isArray(body.data) ? (body.data as Record<string, unknown>[]) : [];
+  return {
+    success: ok,
+    message: ok ? undefined : String(body.message ?? "Impossible de charger les contrats."),
+    contracts: rows.map((row) => ({
+      id: String(row.id ?? ""),
+      employeeId: String(row.employeeId ?? ""),
+      type: String(row.type ?? "cdi"),
+      startDate: String(row.startDate ?? ""),
+      endDate: (row.endDate as string | null) ?? null,
+      status: String(row.status ?? "active"),
+      salary: row.salary === undefined ? undefined : Number(row.salary),
+    })),
+  };
+}
+
+export async function createContractAction(input: { employeeId: string; type: string; startDate: string; endDate?: string; salary?: number; notes?: string }): Promise<HrActionResult> {
+  const { ok, body } = await hrRequest("/hr/contracts", { method: "POST", body: JSON.stringify(input) });
+  if (ok) revalidatePath("/dashboard/hr/contracts");
+  return { success: ok, message: ok ? "Contrat enregistré" : String(body.message ?? "Création impossible.") };
+}
+
+/* ------------------------------- Departments ------------------------------- */
+
+export async function createDepartmentAction(input: { name: string; description?: string }): Promise<HrActionResult<HrDepartment>> {
+  const { ok, body } = await hrRequest("/hr/departments", { method: "POST", body: JSON.stringify(input) });
+  if (ok) revalidatePath("/dashboard/hr/departments");
+  const data = body.data as Record<string, unknown> | undefined;
+  return {
+    success: ok,
+    message: ok ? "Département créé" : String(body.message ?? "Création impossible."),
+    data: data ? { id: String(data.id ?? ""), name: String(data.name ?? "") } : undefined,
+  };
+}
+
+export async function updateDepartmentAction(id: string, input: { name?: string; description?: string }): Promise<HrActionResult> {
+  const { ok, body } = await hrRequest(`/hr/departments/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  if (ok) revalidatePath("/dashboard/hr/departments");
+  return { success: ok, message: ok ? "Département mis à jour" : String(body.message ?? "Mise à jour impossible.") };
+}
+
+export async function deleteDepartmentAction(id: string): Promise<HrActionResult> {
+  const { ok, body } = await hrRequest(`/hr/departments/${id}`, { method: "DELETE" });
+  if (ok) revalidatePath("/dashboard/hr/departments");
+  return { success: ok, message: ok ? "Département supprimé" : String(body.message ?? "Suppression impossible.") };
 }

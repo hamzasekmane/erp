@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { serverApi } from "@/app/lib/serverApi";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -29,29 +30,27 @@ interface ArchivedClient {
   status: "archived" | "pending_deletion";
 }
 
+interface ArchivedRow {
+  id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  size?: number;
+  createdAt?: string;
+}
+
 export default async function ArchivedClientsPage() {
-  const archivedClients: ArchivedClient[] = [
-    {
-      id: "1",
-      name: "Tech Solutions SARL",
-      email: "contact@techsolutions.com",
-      phone: "+33 1 23 45 67 89",
-      totalInvoices: 24,
-      lastOrder: "2023-12-15",
-      archivedDate: "2024-01-15",
-      status: "archived",
-    },
-    {
-      id: "2",
-      name: "Digital Agency Pro",
-      email: "info@digitalagency.com",
-      phone: "+33 1 98 76 54 32",
-      totalInvoices: 18,
-      lastOrder: "2023-11-20",
-      archivedDate: "2024-01-20",
-      status: "archived",
-    },
-  ];
+  const rows = (await serverApi<ArchivedRow[]>("/archives/documents?category=client&limit=100")) ?? [];
+  const archivedClients: ArchivedClient[] = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: "—",
+    phone: "—",
+    totalInvoices: 0,
+    lastOrder: "",
+    archivedDate: (row.createdAt ?? "").slice(0, 10),
+    status: "archived" as const,
+  }));
 
   return (
     <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">

@@ -1,9 +1,10 @@
 "use server";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 export type NotificationActionResult = {
   success: boolean;

@@ -14,7 +14,15 @@ export class ApiError extends Error {
   }
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import { apiBaseUrl } from "./apiBase";
+
+/**
+ * Resolved on every call so that the browser (`/api`, proxied) and the server
+ * (`API_INTERNAL_URL` / `API_PROXY_TARGET`) each use a valid base URL.
+ */
+function apiUrl(): string {
+  return apiBaseUrl();
+}
 
 export async function apiFetch<T>(
   endpoint: string,
@@ -25,7 +33,7 @@ export async function apiFetch<T>(
   let res: Response;
 
   try {
-    res = await fetch(`${API_URL}${endpoint}`, {
+    res = await fetch(`${apiUrl()}${endpoint}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",

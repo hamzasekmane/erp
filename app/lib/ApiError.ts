@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 // app/lib/apiFetch.ts
 
 export class ApiError extends Error {
@@ -19,7 +20,7 @@ export async function apiFetch<T>(
   token?: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const baseUrl = apiBaseUrl();
   const url = `${baseUrl}${endpoint}`;
 
   // Create headers as a plain object first

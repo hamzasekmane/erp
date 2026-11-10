@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { z } from "zod";
 
 // ===== SCHÉMAS ZOD POUR L'IMPORTATION =====
@@ -45,7 +46,7 @@ export type ImportError = z.infer<typeof ImportErrorSchema>;
 export type ImportResponse = z.infer<typeof ImportResponseSchema>;
 export type ImportValidation = z.infer<typeof ImportValidationSchema>;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 export const clientImportService = {
   /**

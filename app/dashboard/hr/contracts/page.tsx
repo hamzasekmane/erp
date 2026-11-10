@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { listContractsAction, listEmployeesAction } from "@/app/actions/hrActions";
 
 interface Contract {
   id: string;
@@ -75,119 +76,7 @@ export default function ContractsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  const [contracts, setContracts] = useState<Contract[]>([
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Ahmed Benali",
-      department: "IT",
-      position: "Développeur Full Stack",
-      type: "cdi",
-      status: "active",
-      startDate: "2024-01-15",
-      probationEndDate: "2024-04-15",
-      salary: 45000,
-      currency: "DZD",
-      workHours: 40,
-      workLocation: "Alger",
-      documents: ["contrat_cdi_ahmed.pdf"],
-      signedBy: "Karim Mansouri",
-      signedAt: "2024-01-10",
-      createdAt: "2024-01-05"
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Fatima Zohra",
-      department: "IT",
-      position: "Chef de projet",
-      type: "cdi",
-      status: "active",
-      startDate: "2023-08-01",
-      salary: 65000,
-      currency: "DZD",
-      workHours: 40,
-      workLocation: "Alger",
-      documents: ["contrat_cdi_fatima.pdf"],
-      signedBy: "Karim Mansouri",
-      signedAt: "2023-07-25",
-      createdAt: "2023-07-20"
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Mohamed Slimani",
-      department: "Finance",
-      position: "Comptable",
-      type: "cdi",
-      status: "active",
-      startDate: "2024-02-10",
-      probationEndDate: "2024-05-10",
-      salary: 48000,
-      currency: "DZD",
-      workHours: 40,
-      workLocation: "Alger",
-      documents: ["contrat_cdi_mohamed.pdf"],
-      signedBy: "Nadia Bensalem",
-      signedAt: "2024-02-05",
-      createdAt: "2024-02-01"
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Samira Kaci",
-      department: "Marketing",
-      position: "Responsable Marketing",
-      type: "cdi",
-      status: "active",
-      startDate: "2023-11-20",
-      salary: 58000,
-      currency: "DZD",
-      workHours: 40,
-      workLocation: "Alger",
-      documents: ["contrat_cdi_samira.pdf"],
-      signedBy: "Karim Mansouri",
-      signedAt: "2023-11-15",
-      createdAt: "2023-11-10"
-    },
-    {
-      id: "5",
-      employeeId: "EMP005",
-      employeeName: "Yacine Boukadoum",
-      department: "IT",
-      position: "Stagiaire",
-      type: "stage",
-      status: "active",
-      startDate: "2024-03-01",
-      endDate: "2024-08-31",
-      salary: 15000,
-      currency: "DZD",
-      workHours: 35,
-      workLocation: "Alger",
-      documents: ["convention_stage_yacine.pdf"],
-      signedBy: "Ahmed Benali",
-      signedAt: "2024-02-25",
-      createdAt: "2024-02-20"
-    },
-    {
-      id: "6",
-      employeeId: "EMP006",
-      employeeName: "Nadia Bensalem",
-      department: "Finance",
-      position: "Directrice Financière",
-      type: "cdi",
-      status: "active",
-      startDate: "2022-06-01",
-      salary: 85000,
-      currency: "DZD",
-      workHours: 40,
-      workLocation: "Alger",
-      documents: ["contrat_cdi_nadia.pdf"],
-      signedBy: "CEO",
-      signedAt: "2022-05-25",
-      createdAt: "2022-05-20"
-    }
-  ]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
 
   const departments = [...new Set(contracts.map(c => c.department))];
 
@@ -202,6 +91,46 @@ export default function ContractsPage() {
     stage: contracts.filter(c => c.type === 'stage').length,
     freelance: contracts.filter(c => c.type === 'freelance').length
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const [contractsResult, employeesResult] = await Promise.all([listContractsAction(), listEmployeesAction({ limit: 500 })]);
+      if (cancelled) return;
+      if (!contractsResult.success) {
+        toast.error(contractsResult.message || "Impossible de charger les contrats");
+        setLoading(false);
+        return;
+      }
+      const employees = new Map(employeesResult.employees.map((employee) => [employee.id, employee]));
+      setContracts(contractsResult.contracts.map((contract) => {
+        const employee = employees.get(contract.employeeId);
+        return {
+          id: contract.id,
+          employeeId: contract.employeeId,
+          employeeName: employee ? `${employee.firstName} ${employee.lastName}`.trim() : "—",
+          department: employee?.department ?? "—",
+          position: employee?.position ?? "—",
+          type: (contract.type === "intern" ? "stage" : contract.type) as Contract["type"],
+          status: (contract.status === "active" ? "active" : contract.status === "terminated" ? "terminated" : "pending") as Contract["status"],
+          startDate: contract.startDate,
+          endDate: contract.endDate ?? undefined,
+          salary: contract.salary ?? employee?.salary ?? 0,
+          currency: "DZD",
+          workHours: 40,
+          workLocation: "—",
+          documents: [],
+          signedBy: "—",
+          createdAt: contract.startDate,
+        };
+      }));
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     filterContracts();

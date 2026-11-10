@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { serverApi } from "@/app/lib/serverApi";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -28,29 +29,27 @@ interface ArchivedProduct {
   status: "archived" | "pending_deletion";
 }
 
+interface ArchivedRow {
+  id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  size?: number;
+  createdAt?: string;
+}
+
 export default async function ArchivedProductsPage() {
-  const archivedProducts: ArchivedProduct[] = [
-    {
-      id: "1",
-      name: "Smartphone X100",
-      sku: "PHN-001",
-      category: "Électronique",
-      price: 699.00,
-      stock: 0,
-      archivedDate: "2024-01-15",
-      status: "archived",
-    },
-    {
-      id: "2",
-      name: "Tablette Pro",
-      sku: "TAB-002",
-      category: "Électronique",
-      price: 499.00,
-      stock: 0,
-      archivedDate: "2024-01-20",
-      status: "archived",
-    },
-  ];
+  const rows = (await serverApi<ArchivedRow[]>("/archives/documents?category=product&limit=100")) ?? [];
+  const archivedProducts: ArchivedProduct[] = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    sku: "—",
+    category: row.category ?? "product",
+    price: 0,
+    stock: 0,
+    archivedDate: (row.createdAt ?? "").slice(0, 10),
+    status: "archived" as const,
+  }));
 
   return (
     <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">

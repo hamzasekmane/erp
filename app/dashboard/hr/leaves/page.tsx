@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { listLeavesAction, decideLeaveAction } from "@/app/actions/hrActions";
 
 interface Leave {
   id: string;
@@ -70,96 +71,7 @@ export default function LeavesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  const [leaves, setLeaves] = useState<Leave[]>([
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Ahmed Benali",
-      department: "IT",
-      type: "annual",
-      startDate: "2024-04-01",
-      endDate: "2024-04-07",
-      duration: 7,
-      status: "pending",
-      reason: "Vacances familiales",
-      createdAt: "2024-03-20",
-      notes: "Souhaité depuis longtemps"
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Fatima Zohra",
-      department: "IT",
-      type: "sick",
-      startDate: "2024-03-25",
-      endDate: "2024-03-28",
-      duration: 4,
-      status: "approved",
-      reason: "Grippe avec fièvre",
-      approvedBy: "Karim Mansouri",
-      approvedAt: "2024-03-21",
-      createdAt: "2024-03-21"
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Mohamed Slimani",
-      department: "Finance",
-      type: "annual",
-      startDate: "2024-04-15",
-      endDate: "2024-04-22",
-      duration: 8,
-      status: "approved",
-      reason: "Voyage à l'étranger",
-      approvedBy: "Nadia Bensalem",
-      approvedAt: "2024-03-22",
-      createdAt: "2024-03-18"
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Samira Kaci",
-      department: "Marketing",
-      type: "unpaid",
-      startDate: "2024-05-01",
-      endDate: "2024-05-15",
-      duration: 15,
-      status: "pending",
-      reason: "Formation personnelle",
-      createdAt: "2024-03-25"
-    },
-    {
-      id: "5",
-      employeeId: "EMP005",
-      employeeName: "Yacine Boukadoum",
-      department: "IT",
-      type: "sick",
-      startDate: "2024-03-20",
-      endDate: "2024-03-22",
-      duration: 3,
-      status: "rejected",
-      reason: "Légère fatigue",
-      approvedBy: "Karim Mansouri",
-      approvedAt: "2024-03-19",
-      createdAt: "2024-03-19",
-      notes: "Pas de certificat médical"
-    },
-    {
-      id: "6",
-      employeeId: "EMP006",
-      employeeName: "Nadia Bensalem",
-      department: "Finance",
-      type: "exceptional",
-      startDate: "2024-03-28",
-      endDate: "2024-03-29",
-      duration: 2,
-      status: "approved",
-      reason: "Urgence familiale",
-      approvedBy: "Karim Mansouri",
-      approvedAt: "2024-03-27",
-      createdAt: "2024-03-27"
-    }
-  ]);
+  const [leaves, setLeaves] = useState<Leave[]>([]);
 
   const departments = [...new Set(leaves.map(l => l.department))];
 
@@ -173,6 +85,33 @@ export default function LeavesPage() {
     annualDays: leaves.filter(l => l.type === 'annual').reduce((sum, l) => sum + l.duration, 0),
     sickDays: leaves.filter(l => l.type === 'sick').reduce((sum, l) => sum + l.duration, 0)
   };
+
+  const loadLeaves = async () => {
+    setLoading(true);
+    const result = await listLeavesAction();
+    if (result.success) {
+      setLeaves(result.leaves.map((leave) => ({
+        id: leave.id,
+        employeeId: leave.employeeId,
+        employeeName: leave.employeeName || "—",
+        department: "—",
+        type: (leave.type as Leave["type"]) ?? "annual",
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        duration: leave.days,
+        status: leave.status,
+        reason: leave.reason ?? "",
+        createdAt: leave.startDate,
+      })));
+    } else {
+      toast.error(result.message || "Impossible de charger les congés");
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void loadLeaves();
+  }, []);
 
   useEffect(() => {
     filterLeaves();
@@ -252,21 +191,29 @@ export default function LeavesPage() {
     });
   };
 
-  const approveLeave = (id: string) => {
-    setLeaves(leaves.map(l => 
-      l.id === id 
-        ? { ...l, status: "approved", approvedBy: "Administrateur", approvedAt: new Date().toISOString() }
-        : l
-    ));
-    toast.success("Congé approuvé avec succès");
+  const approveLeave = async (id: string) => {
+    const result = await decideLeaveAction(id, "approved");
+    if (!result.success) {
+      toast.error(result.message || "Approbation impossible");
+    } else {
+      setLeaves(leaves.map(l =>
+        l.id === id
+          ? { ...l, status: "approved", approvedBy: "Vous", approvedAt: new Date().toISOString() }
+          : l
+      ));
+      toast.success("Congé approuvé avec succès");
+    }
     setShowApproveModal(false);
   };
 
-  const rejectLeave = (id: string) => {
-    setLeaves(leaves.map(l => 
-      l.id === id ? { ...l, status: "rejected" } : l
-    ));
-    toast.success("Congé refusé");
+  const rejectLeave = async (id: string) => {
+    const result = await decideLeaveAction(id, "rejected");
+    if (!result.success) {
+      toast.error(result.message || "Refus impossible");
+    } else {
+      setLeaves(leaves.map(l => (l.id === id ? { ...l, status: "rejected" } : l)));
+      toast.success("Congé refusé");
+    }
     setShowRejectModal(false);
   };
 

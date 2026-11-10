@@ -1,5 +1,6 @@
 "use client";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus, X, Check, Search, Loader2, Users } from "lucide-react";
@@ -42,7 +43,7 @@ export default function AddClientsModal({ groupId, token, existingClientIds }: A
     setHasSearched(true);
     
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const API_URL = apiBaseUrl();
       console.log("🔍 Recherche de clients avec le terme:", search);
       
       const res = await fetch(`${API_URL}/clients?search=${encodeURIComponent(search)}&limit=20`, {

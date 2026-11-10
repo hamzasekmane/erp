@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import {
   ClientSchema,
   ClientStatsSchema,
@@ -9,7 +10,7 @@ import {
   UpdateClient
 } from "@/app/types/client";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 const IS_DEV = process.env.NODE_ENV === "development";
 
 export interface ApiError {

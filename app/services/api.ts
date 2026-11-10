@@ -1,6 +1,7 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { ApiResponse } from "./settingsService";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_BASE_URL = apiBaseUrl();
 
 export const apiService = {
   register: async (data: any) => {

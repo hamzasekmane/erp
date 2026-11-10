@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { payrollAction } from "@/app/actions/hrActions";
 
 interface Payroll {
   id: string;
@@ -73,124 +74,7 @@ export default function PayrollPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  const [payrolls, setPayrolls] = useState<Payroll[]>([
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Ahmed Benali",
-      department: "IT",
-      position: "Développeur Full Stack",
-      month: "03",
-      year: 2024,
-      baseSalary: 45000,
-      bonuses: 5000,
-      overtime: 2500,
-      deductions: 2000,
-      taxes: 3500,
-      netSalary: 47000,
-      status: "paid",
-      paymentDate: "2024-03-28",
-      paymentMethod: "bank",
-      bankAccount: "12345678901",
-      createdAt: "2024-03-01"
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Fatima Zohra",
-      department: "IT",
-      position: "Chef de projet",
-      month: "03",
-      year: 2024,
-      baseSalary: 65000,
-      bonuses: 8000,
-      overtime: 0,
-      deductions: 2500,
-      taxes: 5000,
-      netSalary: 65500,
-      status: "paid",
-      paymentDate: "2024-03-28",
-      paymentMethod: "bank",
-      bankAccount: "23456789012",
-      createdAt: "2024-03-01"
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Mohamed Slimani",
-      department: "Finance",
-      position: "Comptable",
-      month: "03",
-      year: 2024,
-      baseSalary: 48000,
-      bonuses: 3000,
-      overtime: 0,
-      deductions: 2000,
-      taxes: 3800,
-      netSalary: 45200,
-      status: "pending",
-      paymentMethod: "bank",
-      bankAccount: "34567890123",
-      createdAt: "2024-03-01"
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Samira Kaci",
-      department: "Marketing",
-      position: "Responsable Marketing",
-      month: "03",
-      year: 2024,
-      baseSalary: 58000,
-      bonuses: 6000,
-      overtime: 1500,
-      deductions: 2200,
-      taxes: 4200,
-      netSalary: 59100,
-      status: "pending",
-      paymentMethod: "bank",
-      bankAccount: "45678901234",
-      createdAt: "2024-03-01"
-    },
-    {
-      id: "5",
-      employeeId: "EMP005",
-      employeeName: "Yacine Boukadoum",
-      department: "IT",
-      position: "Stagiaire",
-      month: "03",
-      year: 2024,
-      baseSalary: 15000,
-      bonuses: 0,
-      overtime: 0,
-      deductions: 0,
-      taxes: 0,
-      netSalary: 15000,
-      status: "paid",
-      paymentDate: "2024-03-28",
-      paymentMethod: "cash",
-      createdAt: "2024-03-01"
-    },
-    {
-      id: "6",
-      employeeId: "EMP006",
-      employeeName: "Nadia Bensalem",
-      department: "Finance",
-      position: "Directrice Financière",
-      month: "03",
-      year: 2024,
-      baseSalary: 85000,
-      bonuses: 15000,
-      overtime: 0,
-      deductions: 4000,
-      taxes: 7000,
-      netSalary: 89000,
-      status: "pending",
-      paymentMethod: "bank",
-      bankAccount: "56789012345",
-      createdAt: "2024-03-01"
-    }
-  ]);
+  const [payrolls, setPayrolls] = useState<Payroll[]>([]);
 
   const departments = [...new Set(payrolls.map(p => p.department))];
 
@@ -203,6 +87,43 @@ export default function PayrollPage() {
     totalTaxes: payrolls.reduce((sum, p) => sum + p.taxes, 0),
     totalDeductions: payrolls.reduce((sum, p) => sum + p.deductions, 0)
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const month = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+      const result = await payrollAction(month);
+      if (cancelled) return;
+      if (result.success) {
+        setPayrolls(result.lines.map((line) => ({
+          id: line.employeeId,
+          employeeId: line.employeeId,
+          employeeName: line.name,
+          department: line.department ?? "—",
+          position: "—",
+          month: String(selectedMonth + 1).padStart(2, "0"),
+          year: selectedYear,
+          baseSalary: line.baseSalary,
+          bonuses: 0,
+          overtime: 0,
+          deductions: line.deduction,
+          taxes: 0,
+          netSalary: line.netSalary,
+          status: "pending" as const,
+          paymentMethod: "bank" as const,
+          createdAt: `${month}-01`,
+          notes: line.leaveDays > 0 ? `${line.leaveDays} jour(s) de congé déduit(s)` : undefined,
+        })));
+      } else {
+        toast.error(result.message || "Impossible de charger la paie");
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
     filterPayrolls();

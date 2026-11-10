@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { listAttendanceAction } from "@/app/actions/hrActions";
 
 interface Attendance {
   id: string;
@@ -61,84 +62,7 @@ export default function AttendancePage() {
   const [itemsPerPage] = useState(10);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
-  const [attendances, setAttendances] = useState<Attendance[]>([
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Ahmed Benali",
-      date: "2024-03-29",
-      checkIn: "08:45",
-      checkOut: "17:30",
-      status: "present",
-      workingHours: 7.75,
-      overtime: 0.5,
-      department: "IT"
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Fatima Zohra",
-      date: "2024-03-29",
-      checkIn: "09:15",
-      checkOut: "18:00",
-      status: "late",
-      workingHours: 8,
-      overtime: 0,
-      department: "IT",
-      notes: "Retard de 15 minutes"
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Mohamed Slimani",
-      date: "2024-03-29",
-      checkIn: "08:30",
-      checkOut: "17:00",
-      status: "present",
-      workingHours: 7.5,
-      overtime: 0,
-      department: "Finance"
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Samira Kaci",
-      date: "2024-03-29",
-      checkIn: "",
-      checkOut: "",
-      status: "absent",
-      workingHours: 0,
-      overtime: 0,
-      department: "Marketing",
-      notes: "Congé maladie"
-    },
-    {
-      id: "5",
-      employeeId: "EMP005",
-      employeeName: "Yacine Boukadoum",
-      date: "2024-03-29",
-      checkIn: "08:30",
-      checkOut: "12:30",
-      status: "half-day",
-      workingHours: 4,
-      overtime: 0,
-      department: "IT",
-      notes: "Départ à midi"
-    },
-    {
-      id: "6",
-      employeeId: "EMP006",
-      employeeName: "Nadia Bensalem",
-      date: "2024-03-29",
-      checkIn: "",
-      checkOut: "",
-      status: "holiday",
-      workingHours: 0,
-      overtime: 0,
-      department: "Finance",
-      notes: "Congé annuel"
-    }
-  ]);
+  const [attendances, setAttendances] = useState<Attendance[]>([]);
 
   const departments = [...new Set(attendances.map(a => a.department))];
 
@@ -152,6 +76,40 @@ export default function AttendancePage() {
     totalWorkingHours: attendances.reduce((sum, a) => sum + a.workingHours, 0),
     totalOvertime: attendances.reduce((sum, a) => sum + a.overtime, 0)
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const result = await listAttendanceAction();
+      if (cancelled) return;
+      if (result.success) {
+        setAttendances(result.records.map((record) => {
+          const hours = record.checkIn && record.checkOut
+            ? Math.max(0, (Number(record.checkOut.slice(0, 2)) * 60 + Number(record.checkOut.slice(3, 5)) - (Number(record.checkIn.slice(0, 2)) * 60 + Number(record.checkIn.slice(3, 5)))) / 60)
+            : 0;
+          return {
+            id: record.id,
+            employeeId: record.employeeId,
+            employeeName: record.employeeName || "—",
+            date: record.date,
+            checkIn: record.checkIn ?? "",
+            checkOut: record.checkOut ?? "",
+            status: (["present", "absent", "late", "half-day", "holiday"].includes(record.status) ? record.status : "present") as Attendance["status"],
+            workingHours: Number(hours.toFixed(2)),
+            overtime: hours > 8 ? Number((hours - 8).toFixed(2)) : 0,
+            department: "—",
+          };
+        }));
+      } else {
+        toast.error(result.message || "Impossible de charger les présences");
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     filterAttendances();

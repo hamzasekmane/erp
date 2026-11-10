@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { serverApi } from "@/app/lib/serverApi";
 import {
   Archive,
   FileText,
@@ -28,14 +29,17 @@ interface ArchiveSection {
 }
 
 export default async function ArchivesPage() {
-  // Mock counts - replace with real API calls
+  const stats = await serverApi<{ totalDocuments: number; byCategory: Array<{ category: string; count: number }> }>("/archives/stats");
+  const countFor = (category: string) => stats?.byCategory.find((row) => row.category === category)?.count ?? 0;
+  const documents = (await serverApi<Array<{ id: string; name: string; category: string; createdAt?: string }>>("/archives/documents?limit=5")) ?? [];
+
   const archiveSections: ArchiveSection[] = [
     {
       title: "Factures archivées",
       description: "Factures historiques et documents comptables",
       icon: FileText,
       href: "/dashboard/archives/invoices",
-      count: 147,
+      count: countFor("invoice"),
       color: "text-blue-500",
       bgColor: "from-blue-500/20 to-blue-500/5",
     },
@@ -44,7 +48,7 @@ export default async function ArchivesPage() {
       description: "Anciens clients et prospects inactifs",
       icon: Users,
       href: "/dashboard/archives/clients",
-      count: 89,
+      count: countFor("client"),
       color: "text-emerald-500",
       bgColor: "from-emerald-500/20 to-emerald-500/5",
     },
@@ -53,7 +57,7 @@ export default async function ArchivesPage() {
       description: "Produits discontinués ou hors catalogue",
       icon: Package,
       href: "/dashboard/archives/products",
-      count: 234,
+      count: countFor("product"),
       color: "text-purple-500",
       bgColor: "from-purple-500/20 to-purple-500/5",
     },
@@ -62,19 +66,27 @@ export default async function ArchivesPage() {
       description: "Contrats, rapports et fichiers historiques",
       icon: FolderArchive,
       href: "/dashboard/archives/documents",
-      count: 512,
+      count: stats?.totalDocuments ?? 0,
       color: "text-amber-500",
       bgColor: "from-amber-500/20 to-amber-500/5",
     },
   ];
 
   const totalArchived = archiveSections.reduce((sum, section) => sum + section.count, 0);
-  const recentArchives = [
-    { type: "Facture", name: "INV-2024-0042", date: "2024-01-15", status: "Archivée" },
-    { type: "Client", name: "Tech Solutions SARL", date: "2024-01-14", status: "Archivé" },
-    { type: "Produit", name: "Smartphone X100", date: "2024-01-12", status: "Archivé" },
-    { type: "Document", name: "Contrat_2023_089.pdf", date: "2024-01-10", status: "Archivé" },
-  ];
+  const categoryLabels: Record<string, string> = {
+    invoice: "Facture",
+    client: "Client",
+    product: "Produit",
+    hr: "RH",
+    contract: "Contrat",
+    other: "Document",
+  };
+  const recentArchives = documents.map((document) => ({
+    type: categoryLabels[document.category] ?? "Document",
+    name: document.name,
+    date: (document.createdAt ?? "").slice(0, 10),
+    status: "Archivé",
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">

@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import { apiBaseUrl } from "@/app/lib/apiBase";
+const API_URL = apiBaseUrl();
 
 export interface ClientNote {
   _id: string;

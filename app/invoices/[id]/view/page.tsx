@@ -1,5 +1,6 @@
 "use client";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { useEffect, useState, use } from "react"; 
 import { invoiceService } from "@/app/services/invoice.service";
 import InvoiceDownloadBtn from "@/app/components/InvoiceDownloadBtn";
@@ -43,7 +44,7 @@ export default function PublicInvoiceViewPage({ params }: { params: Promise<{ id
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // URL de l'API (à définir dans ton .env.local)
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const API_URL = apiBaseUrl();
 
   useEffect(() => {
     const fetchInvoice = async () => {

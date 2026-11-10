@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -53,7 +54,7 @@ export default async function NewInvoicePage() {
     );
   }
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const API_URL = apiBaseUrl();
 
   if (IS_DEV) {
     console.log("🔍 Fetching clients and products...");

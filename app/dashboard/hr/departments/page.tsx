@@ -1,6 +1,7 @@
 // frontend/app/dashboard/hr/departments/page.tsx
 "use client";
 import { useEffect } from "react";
+import { listDepartmentsAction, listEmployeesAction, createDepartmentAction, deleteDepartmentAction } from "@/app/actions/hrActions";
 import { useState } from "react";
 import { 
   Building2, 
@@ -56,116 +57,12 @@ export default function DepartmentsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  const [newDepartmentName, setNewDepartmentName] = useState("");
+  const [newDepartmentDescription, setNewDepartmentDescription] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  const [departments, setDepartments] = useState<Department[]>([
-    {
-      id: "1",
-      name: "Direction Générale",
-      code: "DG",
-      manager: "Karim Mansouri",
-      managerEmail: "karim.mansouri@velora.com",
-      managerPhone: "+213 555 111 222",
-      location: "Alger, Siège",
-      employeeCount: 3,
-      budget: 500000,
-      description: "Direction stratégique de l'entreprise",
-      status: "active",
-      createdAt: "2024-01-01",
-      subDepartments: ["IT", "Finance", "Marketing"]
-    },
-    {
-      id: "2",
-      name: "Informatique (IT)",
-      code: "IT",
-      manager: "Ahmed Benali",
-      managerEmail: "ahmed.benali@velora.com",
-      managerPhone: "+213 555 123 456",
-      location: "Alger, Technopole",
-      employeeCount: 8,
-      budget: 350000,
-      description: "Développement et infrastructure informatique",
-      status: "active",
-      createdAt: "2024-01-15",
-      parentDepartment: "Direction Générale"
-    },
-    {
-      id: "3",
-      name: "Finance & Comptabilité",
-      code: "FIN",
-      manager: "Nadia Bensalem",
-      managerEmail: "nadia.bensalem@velora.com",
-      managerPhone: "+213 555 234 567",
-      location: "Alger, Siège",
-      employeeCount: 5,
-      budget: 280000,
-      description: "Gestion financière et comptabilité",
-      status: "active",
-      createdAt: "2024-01-20",
-      parentDepartment: "Direction Générale"
-    },
-    {
-      id: "4",
-      name: "Marketing & Communication",
-      code: "MKT",
-      manager: "Samira Kaci",
-      managerEmail: "samira.kaci@velora.com",
-      managerPhone: "+213 555 345 678",
-      location: "Alger, Siège",
-      employeeCount: 4,
-      budget: 200000,
-      description: "Stratégie marketing et communication",
-      status: "active",
-      createdAt: "2024-02-01",
-      parentDepartment: "Direction Générale"
-    },
-    {
-      id: "5",
-      name: "Ressources Humaines",
-      code: "HR",
-      manager: "Fatima Zohra",
-      managerEmail: "fatima.zohra@velora.com",
-      managerPhone: "+213 555 456 789",
-      location: "Alger, Siège",
-      employeeCount: 3,
-      budget: 180000,
-      description: "Gestion des talents et RH",
-      status: "active",
-      createdAt: "2024-02-10",
-      parentDepartment: "Direction Générale"
-    },
-    {
-      id: "6",
-      name: "Commercial",
-      code: "SALES",
-      manager: "Mohamed Slimani",
-      managerEmail: "mohamed.slimani@velora.com",
-      managerPhone: "+213 555 567 890",
-      location: "Alger, Centre",
-      employeeCount: 6,
-      budget: 320000,
-      description: "Ventes et développement commercial",
-      status: "active",
-      createdAt: "2024-02-15",
-      parentDepartment: "Direction Générale"
-    },
-    {
-      id: "7",
-      name: "Logistique",
-      code: "LOG",
-      manager: "Yacine Boukadoum",
-      managerEmail: "yacine.boukadoum@velora.com",
-      managerPhone: "+213 555 678 901",
-      location: "Alger, Zone industrielle",
-      employeeCount: 4,
-      budget: 220000,
-      description: "Gestion des stocks et livraisons",
-      status: "active",
-      createdAt: "2024-03-01",
-      parentDepartment: "Direction Générale"
-    }
-  ]);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   const stats = {
     total: departments.length,
@@ -174,6 +71,40 @@ export default function DepartmentsPage() {
     totalEmployees: departments.reduce((sum, d) => sum + d.employeeCount, 0),
     totalBudget: departments.reduce((sum, d) => sum + d.budget, 0)
   };
+
+  const loadDepartments = async () => {
+    setLoading(true);
+    const [departmentsResult, employeesResult] = await Promise.all([listDepartmentsAction(), listEmployeesAction({ limit: 500 })]);
+    if (!departmentsResult.success) {
+      toast.error("Impossible de charger les départements");
+      setLoading(false);
+      return;
+    }
+    const counts = new Map<string, number>();
+    for (const employee of employeesResult.employees) {
+      const key = employee.department ?? "";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    setDepartments(departmentsResult.departments.map((department) => ({
+      id: department.id,
+      name: department.name,
+      code: department.code || department.name.slice(0, 3).toUpperCase(),
+      manager: "—",
+      managerEmail: "—",
+      managerPhone: "—",
+      location: "—",
+      employeeCount: counts.get(department.name) ?? 0,
+      budget: 0,
+      description: "",
+      status: "active" as const,
+      createdAt: new Date().toISOString(),
+    })));
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    void loadDepartments();
+  }, []);
 
   useEffect(() => {
     filterDepartments();
@@ -228,10 +159,14 @@ export default function DepartmentsPage() {
     return new Intl.NumberFormat('fr-DZ', { style: 'currency', currency: 'DZD' }).format(budget);
   };
 
-  const deleteDepartment = (id: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce département ? Tous les employés seront transférés.")) return;
-    setDepartments(departments.filter(d => d.id !== id));
-    toast.success("Département supprimé avec succès");
+  const deleteDepartment = async (id: string) => {
+    const result = await deleteDepartmentAction(id);
+    if (result.success) {
+      setDepartments(departments.filter(d => d.id !== id));
+      toast.success("Département supprimé avec succès");
+    } else {
+      toast.error(result.message || "Suppression impossible");
+    }
     setShowDeleteConfirm(false);
   };
 
@@ -499,7 +434,13 @@ export default function DepartmentsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Nom du département *</label>
-                    <input type="text" className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm" placeholder="Informatique" />
+                    <input
+                      type="text"
+                      value={newDepartmentName}
+                      onChange={(event) => setNewDepartmentName(event.target.value)}
+                      className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm"
+                      placeholder="Informatique"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Code *</label>
@@ -530,7 +471,13 @@ export default function DepartmentsPage() {
                 
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Description</label>
-                  <textarea rows={3} className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm resize-none" placeholder="Description du département..." />
+                  <textarea
+                    rows={3}
+                    value={newDepartmentDescription}
+                    onChange={(event) => setNewDepartmentDescription(event.target.value)}
+                    className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm resize-none"
+                    placeholder="Description du département..."
+                  />
                 </div>
                 
                 <div>
@@ -552,6 +499,25 @@ export default function DepartmentsPage() {
                   Annuler
                 </button>
                 <button
+                  onClick={async () => {
+                    if (!newDepartmentName.trim()) {
+                      toast.error("Le nom du département est obligatoire");
+                      return;
+                    }
+                    const result = await createDepartmentAction({
+                      name: newDepartmentName.trim(),
+                      description: newDepartmentDescription.trim() || undefined,
+                    });
+                    if (!result.success) {
+                      toast.error(result.message || "Création impossible");
+                      return;
+                    }
+                    toast.success("Département créé avec succès");
+                    setShowCreateModal(false);
+                    setNewDepartmentName("");
+                    setNewDepartmentDescription("");
+                    await loadDepartments();
+                  }}
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold"
                 >
                   Créer le département

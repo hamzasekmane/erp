@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { cookies } from "next/headers";
 import { productsService } from "@/app/services/products.Service";
 import { taxService } from "@/app/services/taxService";
@@ -27,7 +28,7 @@ interface SubscriptionError {
 }
 
 const IS_DEV = process.env.NODE_ENV === "development";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 async function checkSubscriptionExpired(response: Response): Promise<SubscriptionError | null> {
   if (response.status === 403) {

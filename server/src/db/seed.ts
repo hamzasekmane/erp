@@ -352,8 +352,10 @@ async function seedDemoOps() {
   });
 
   await db.insert(archiveDocuments).values([
-    { id: newId(), tenantId, name: "Statuts de la société", category: "legal", description: "Acte notarié 2021", fileUrl: "/api/uploads/demo-statuts.pdf", mime: "application/pdf", size: 245_000, tags: ["legal", "2021"], uploadedBy: adminId },
-    { id: newId(), tenantId, name: "Bilan comptable 2025", category: "finance", description: "Exercice clos au 31/12/2025", fileUrl: "/api/uploads/demo-bilan-2025.pdf", mime: "application/pdf", size: 512_000, tags: ["finance"], uploadedBy: adminId },
+    { id: newId(), tenantId, name: "Statuts de la société", category: "contract", description: "Acte notarié 2021", fileUrl: "/api/uploads/demo-statuts.pdf", mime: "application/pdf", size: 245_000, tags: ["contract", "2021"], uploadedBy: adminId },
+    { id: newId(), tenantId, name: "Bilan comptable 2025", category: "invoice", description: "Exercice clos au 31/12/2025", fileUrl: "/api/uploads/demo-bilan-2025.pdf", mime: "application/pdf", size: 512_000, tags: ["invoice"], uploadedBy: adminId },
+    { id: newId(), tenantId, name: "Fiche client — Boulangerie El Baraka", category: "client", description: "Dossier client archivé", fileUrl: "/api/uploads/demo-client.pdf", mime: "application/pdf", size: 120_000, tags: ["client"], uploadedBy: adminId },
+    { id: newId(), tenantId, name: "Catalogue produits 2025", category: "product", description: "Ancien catalogue", fileUrl: "/api/uploads/demo-catalogue.pdf", mime: "application/pdf", size: 890_000, tags: ["product", "2025"], uploadedBy: adminId },
   ]);
 
   console.log("demo HR/support/archives data seeded");
