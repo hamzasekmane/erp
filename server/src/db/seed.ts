@@ -3,23 +3,31 @@ import { closeDb, getDb, initDb } from "./client";
 import { ensureBaselinePlans } from "./bootstrap";
 import { migrate } from "./migrate";
 import {
+  archiveDocuments,
+  attendanceRecords,
   categories,
   clientNotes,
   clients,
   invoiceItems,
+  departments,
+  employees,
   invoices,
+  leaveRequests,
   payments,
   plans,
   products,
   stockLevels,
   stockMovements,
   subscriptions,
+  supportMessages,
+  supportTickets,
   taxes,
   tenantSettings,
   tenants,
   users,
 } from "./schema";
 import { isProd } from "../config/env";
+import { toMinor } from "../shared/money";
 import { hashPassword } from "../shared/security/password";
 import { newId } from "../shared/ids";
 
@@ -250,6 +258,107 @@ async function seedDemo(demoPlanCode: string) {
   return tenantId;
 }
 
+/** HR / support / archives sample data so the operational screens are not empty. */
+async function seedDemoOps() {
+  const db = getDb();
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.subdomain, "demo")).limit(1);
+  if (!tenant) return;
+  const existing = await db.select({ id: departments.id }).from(departments).where(eq(departments.tenantId, tenant.id)).limit(1);
+  if (existing.length > 0) return;
+
+  const tenantId = tenant.id;
+  const [admin] = await db.select().from(users).where(eq(users.tenantId, tenantId)).limit(1);
+  const adminId = admin?.id ?? null;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const deptIds: Record<string, string> = {};
+  for (const name of ["Direction", "Ventes", "Production", "Comptabilité"]) {
+    const id = newId();
+    deptIds[name] = id;
+    await db.insert(departments).values({ id, tenantId, name, description: `Département ${name}` });
+  }
+
+  const staff = [
+    { code: "EMP-0001", firstName: "Yacine", lastName: "Demo", email: DEMO_EMAIL, phone: "0555 12 34 56", departmentId: deptIds.Direction, position: "Gérant", contractType: "cdi", hireDate: "2021-03-01", salaryMinor: toMinor(85000) },
+    { code: "EMP-0002", firstName: "Amel", lastName: "Bensalem", email: "amel@elbaraka.dz", phone: "0555 23 45 67", departmentId: deptIds.Ventes, position: "Responsable commerciale", contractType: "cdi", hireDate: "2022-09-15", salaryMinor: toMinor(55000) },
+    { code: "EMP-0003", firstName: "Karim", lastName: "Mansouri", email: "karim@elbaraka.dz", phone: "0555 34 56 78", departmentId: deptIds.Production, position: "Chef boulanger", contractType: "cdi", hireDate: "2023-01-10", salaryMinor: toMinor(48000) },
+    { code: "EMP-0004", firstName: "Lina", lastName: "Haddad", email: "lina@elbaraka.dz", phone: "0555 45 67 89", departmentId: deptIds.Comptabilité, position: "Comptable", contractType: "cdd", hireDate: "2024-02-01", salaryMinor: toMinor(42000) },
+    { code: "EMP-0005", firstName: "Samir", lastName: "Kaci", email: "samir@elbaraka.dz", phone: "0555 56 78 90", departmentId: deptIds.Production, position: "Apprenti", contractType: "intern", hireDate: "2025-09-01", salaryMinor: toMinor(18000) },
+  ];
+  const employeeIds: string[] = [];
+  for (const member of staff) {
+    const id = newId();
+    employeeIds.push(id);
+    await db.insert(employees).values({ id, tenantId, ...member, status: "active" });
+  }
+
+  await db.insert(leaveRequests).values({
+    id: newId(),
+    tenantId,
+    employeeId: employeeIds[1]!,
+    type: "annual",
+    startDate: "2026-08-10",
+    endDate: "2026-08-20",
+    days: "10",
+    status: "approved",
+    reason: "Congés annuels",
+    decidedBy: adminId,
+    decidedAt: new Date(),
+  });
+  await db.insert(leaveRequests).values({
+    id: newId(),
+    tenantId,
+    employeeId: employeeIds[3]!,
+    type: "sick",
+    startDate: today,
+    endDate: today,
+    days: "1",
+    status: "pending",
+    reason: "Certificat médical à fournir",
+  });
+
+  await db.insert(attendanceRecords).values([
+    { id: newId(), tenantId, employeeId: employeeIds[0]!, date: today, checkIn: "08:02", checkOut: "17:05", status: "present" },
+    { id: newId(), tenantId, employeeId: employeeIds[2]!, date: today, checkIn: "04:30", checkOut: "12:45", status: "present" },
+    { id: newId(), tenantId, employeeId: employeeIds[4]!, date: today, checkIn: "09:15", checkOut: null, status: "late" },
+  ]);
+
+  const ticketId = newId();
+  await db.insert(supportTickets).values({
+    id: ticketId,
+    tenantId,
+    userId: adminId,
+    subject: "Problème d'impression des factures",
+    description: "L'aperçu PDF s'ouvre mais l'impression directe échoue sur le poste caisse.",
+    category: "technical",
+    priority: "high",
+    status: "in_progress",
+  });
+  await db.insert(supportMessages).values({
+    id: newId(),
+    ticketId,
+    authorId: adminId,
+    body: "Le ticket est pris en charge par l'équipe support.",
+  });
+  await db.insert(supportTickets).values({
+    id: newId(),
+    tenantId,
+    userId: adminId,
+    subject: "Demande d'ajout d'utilisateur",
+    description: "Merci de créer un compte pour le nouveau caissier.",
+    category: "account",
+    priority: "medium",
+    status: "open",
+  });
+
+  await db.insert(archiveDocuments).values([
+    { id: newId(), tenantId, name: "Statuts de la société", category: "legal", description: "Acte notarié 2021", fileUrl: "/api/uploads/demo-statuts.pdf", mime: "application/pdf", size: 245_000, tags: ["legal", "2021"], uploadedBy: adminId },
+    { id: newId(), tenantId, name: "Bilan comptable 2025", category: "finance", description: "Exercice clos au 31/12/2025", fileUrl: "/api/uploads/demo-bilan-2025.pdf", mime: "application/pdf", size: 512_000, tags: ["finance"], uploadedBy: adminId },
+  ]);
+
+  console.log("demo HR/support/archives data seeded");
+}
+
 async function main() {
   if (isProd && process.env.SEED_ALLOW_PRODUCTION !== "true") {
     console.error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=true to override.");
@@ -268,6 +377,7 @@ async function main() {
   const withDemo = process.env.SEED_DEMO ? process.env.SEED_DEMO !== "false" : !isProd;
   if (withDemo) {
     await seedDemo(process.env.SEED_DEMO_PLAN ?? "professional");
+    await seedDemoOps();
   }
 
   console.log("seed complete");

@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { createEmployeeAction } from "@/app/actions/hrActions";
 
 interface EmployeeFormData {
   // Informations personnelles
@@ -145,12 +146,29 @@ export default function NewEmployeePage() {
     
     setLoading(true);
     try {
-      // TODO: Appel API pour créer l'employé
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const result = await createEmployeeAction({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        position: formData.position,
+        departmentName: formData.department,
+        contractType: formData.contractType,
+        hireDate: formData.hireDate,
+        salary: Number(formData.salary) || 0,
+      });
+
+      if (!result.success) {
+        toast.error(result.message || "Création impossible");
+        return;
+      }
+
       toast.success("Employé créé avec succès !");
       router.push("/dashboard/hr/employees");
+      router.refresh();
     } catch (error) {
-      toast.error("Erreur lors de la création");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la création");
     } finally {
       setLoading(false);
     }

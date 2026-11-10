@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { listEmployeesAction, deleteEmployeeAction, type HrEmployee } from "@/app/actions/hrActions";
 import { 
   Users, 
   UserPlus, 
@@ -57,8 +58,24 @@ interface Employee {
   manager?: string;
 }
 
+function toUiEmployee(employee: HrEmployee): Employee {
+  return {
+    id: employee.id,
+    firstName: employee.firstName,
+    lastName: employee.lastName,
+    email: employee.email ?? "—",
+    phone: employee.phone ?? "—",
+    position: employee.position ?? "—",
+    department: employee.department ?? "—",
+    hireDate: employee.hireDate,
+    status: employee.status === "terminated" ? "inactive" : employee.status === "active" ? "active" : "inactive",
+    contractType: employee.contractType === "intern" ? "stage" : employee.contractType,
+    salary: employee.salary,
+  };
+}
+
 export default function EmployeesPage() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
@@ -70,94 +87,27 @@ export default function EmployeesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: "1",
-      firstName: "Ahmed",
-      lastName: "Benali",
-      email: "ahmed.benali@velora.com",
-      phone: "+213 555 123 456",
-      position: "Développeur Full Stack",
-      department: "IT",
-      hireDate: "2024-01-15",
-      status: "active",
-      contractType: "cdi",
-      salary: 45000,
-      manager: "Karim Mansouri"
-    },
-    {
-      id: "2",
-      firstName: "Fatima",
-      lastName: "Zohra",
-      email: "fatima.zohra@velora.com",
-      phone: "+213 555 789 012",
-      position: "Chef de projet",
-      department: "IT",
-      hireDate: "2023-08-01",
-      status: "active",
-      contractType: "cdi",
-      salary: 65000,
-      manager: "Karim Mansouri"
-    },
-    {
-      id: "3",
-      firstName: "Mohamed",
-      lastName: "Slimani",
-      email: "mohamed.slimani@velora.com",
-      phone: "+213 555 345 678",
-      position: "Comptable",
-      department: "Finance",
-      hireDate: "2024-02-10",
-      status: "active",
-      contractType: "cdi",
-      salary: 48000,
-      manager: "Nadia Bensalem"
-    },
-    {
-      id: "4",
-      firstName: "Samira",
-      lastName: "Kaci",
-      email: "samira.kaci@velora.com",
-      phone: "+213 555 901 234",
-      position: "Responsable Marketing",
-      department: "Marketing",
-      hireDate: "2023-11-20",
-      status: "active",
-      contractType: "cdi",
-      salary: 58000,
-      manager: "Ahmed Benali"
-    },
-    {
-      id: "5",
-      firstName: "Yacine",
-      lastName: "Boukadoum",
-      email: "yacine.boukadoum@velora.com",
-      phone: "+213 555 567 890",
-      position: "Stagiaire",
-      department: "IT",
-      hireDate: "2024-03-01",
-      status: "active",
-      contractType: "stage",
-      salary: 15000,
-      manager: "Ahmed Benali"
-    },
-    {
-      id: "6",
-      firstName: "Nadia",
-      lastName: "Bensalem",
-      email: "nadia.bensalem@velora.com",
-      phone: "+213 555 234 567",
-      position: "Directrice Financière",
-      department: "Finance",
-      hireDate: "2022-06-01",
-      status: "active",
-      contractType: "cdi",
-      salary: 85000,
-      manager: "CEO"
-    }
-  ]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   const departments = [...new Set(employees.map(e => e.department))];
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const result = await listEmployeesAction({
+        search: searchTerm || undefined,
+        status: statusFilter === "active" || statusFilter === "inactive" ? statusFilter : undefined,
+      });
+      if (cancelled) return;
+      setEmployees(result.employees.map(toUiEmployee));
+      if (!result.success && result.message) toast.error(result.message);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchTerm, statusFilter]);
 
   useEffect(() => {
     filterEmployees();
@@ -241,11 +191,16 @@ export default function EmployeesPage() {
     return new Intl.NumberFormat('fr-DZ', { style: 'currency', currency: 'DZD' }).format(salary);
   };
 
-  const deleteEmployee = (id: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cet employé ?")) return;
-    setEmployees(employees.filter(e => e.id !== id));
-    toast.success("Employé supprimé avec succès");
+  const deleteEmployee = async (id: string) => {
+    const result = await deleteEmployeeAction(id);
+    if (result.success) {
+      setEmployees(employees.filter(e => e.id !== id));
+      toast.success("Employé supprimé avec succès");
+    } else {
+      toast.error(result.message || "Suppression impossible");
+    }
     setShowDeleteConfirm(false);
+    setSelectedEmployee(null);
   };
 
   return (
@@ -274,13 +229,13 @@ export default function EmployeesPage() {
               <Download size={16} />
               Exporter
             </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
+            <Link
+              href="/dashboard/hr/employees/new"
               className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/20"
             >
               <UserPlus size={18} />
               Nouvel employé
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -441,23 +396,6 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Link
-                          href={`/dashboard/hr/employees/${employee.id}`}
-                          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                          title="Voir détails"
-                        >
-                          <Eye size={16} className="text-zinc-500 hover:text-indigo-500" />
-                        </Link>
-                        <button
-                          onClick={() => {
-                            setSelectedEmployee(employee);
-                            setShowEditModal(true);
-                          }}
-                          className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                          title="Modifier"
-                        >
-                          <Edit size={16} className="text-zinc-500 hover:text-amber-500" />
-                        </button>
                         <button
                           onClick={() => {
                             setSelectedEmployee(employee);
