@@ -173,7 +173,7 @@ function NotesList({ notes }: { notes: any[] }) {
               <FileText size={28} className="text-amber-400" />
             </div>
             <div>
-              <h1 className="text-4xl lg:text-5xl font-black text-white uppercase tracking-tighter italic leading-none">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white uppercase tracking-tighter italic leading-none">
                 Notes
                 <span className="text-amber-400 ml-2">Clients</span>
               </h1>

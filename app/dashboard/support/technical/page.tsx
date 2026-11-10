@@ -103,7 +103,7 @@ export default async function TechnicalSupportPage() {
           </div>
           
           {/* Support Hours */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-center">
               <p className="text-[10px] font-black text-emerald-500 uppercase">Disponible</p>
               <p className="text-xs font-black">24/7</p>

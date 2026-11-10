@@ -287,7 +287,7 @@ export default function BenchmarkingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
         
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -322,7 +322,7 @@ export default function BenchmarkingPage() {
           </div>
           
           {/* Controls */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <select
               value={selectedIndustry}
               onChange={(e) => setSelectedIndustry(e.target.value)}
@@ -413,7 +413,7 @@ export default function BenchmarkingPage() {
                 </div>
 
                 {/* Values */}
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                   <div>
                     <p className="text-[10px] text-[var(--foreground-muted)]">Votre valeur</p>
                     <p className="text-xl font-black text-amber-500">{formatValue(metric.yourValue, metric.unit)}</p>
@@ -457,7 +457,7 @@ export default function BenchmarkingPage() {
                 {/* Expanded Details */}
                 {selectedMetric === metric.id && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <p className="text-[10px] text-[var(--foreground-muted)]">Recommandations</p>
                         <ul className="mt-2 space-y-1">

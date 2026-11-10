@@ -24,7 +24,7 @@ export default function EditClientGroupLoading() {
       </div>
 
       {/* Informations rapides Skeleton */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[...Array(2)].map((_, i) => (
           <div key={i} className="h-16 bg-white/5 rounded-xl border border-white/10" />
         ))}

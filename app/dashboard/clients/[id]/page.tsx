@@ -77,7 +77,7 @@ export default async function ClientDetailsPage({ params }: { params: Promise<{ 
         
         <div className="flex flex-col lg:flex-row gap-8 items-start relative z-10">
           {/* Avatar avec initiales */}
-          <div className="w-28 h-28 bg-gradient-to-br from-[var(--accent)] to-blue-600 rounded-[2rem] flex items-center justify-center text-white text-4xl font-black shrink-0 shadow-xl shadow-[var(--accent)]/20">
+          <div className="w-28 h-28 bg-gradient-to-br from-[var(--accent)] to-blue-600 rounded-[2rem] flex items-center justify-center text-white text-3xl sm:text-4xl font-black shrink-0 shadow-xl shadow-[var(--accent)]/20">
             {profile.name.charAt(0).toUpperCase()}
           </div>
           

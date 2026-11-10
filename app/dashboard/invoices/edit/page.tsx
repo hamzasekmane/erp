@@ -31,7 +31,7 @@ export default async function EditInvoicePage({ params }: PageProps) {
   if (!invoice) {
     return (
       <div className="p-20 text-center space-y-4">
-        <h2 className="text-4xl font-black uppercase italic text-[var(--foreground-muted)]">404 // Introuvable</h2>
+        <h2 className="text-3xl sm:text-4xl font-black uppercase italic text-[var(--foreground-muted)]">404 // Introuvable</h2>
         <Link href="/dashboard/invoices" className="text-emerald-500 font-black uppercase text-xs underline">
           Retour au flux principal
         </Link>
@@ -64,7 +64,7 @@ export default async function EditInvoicePage({ params }: PageProps) {
           </div>
           
           <div className="space-y-4">
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-[0.9] text-[var(--foreground)]">
+            <h1 className="text-3xl sm:text-4xl sm:text-5xl font-black italic uppercase tracking-tighter leading-[0.9] text-[var(--foreground)]">
               Réviser la <br /> <span className="text-amber-500">Facture {invoice.invoiceNumber}</span>
             </h1>
             <p className="text-[var(--foreground-muted)] font-bold text-xs uppercase leading-relaxed tracking-tight">

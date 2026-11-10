@@ -59,7 +59,7 @@ export default async function CategoriesPage({ searchParams }: PageProps) {
               Inventaire Global
             </span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-zinc-900 dark:text-white">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-zinc-900 dark:text-white">
             Segments <span className="text-zinc-400">&</span> Familles
           </h1>
         </div>

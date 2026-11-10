@@ -211,7 +211,7 @@ export default function PayrollPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900">
-      <div className="p-6 md:p-8 space-y-8">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -230,7 +230,7 @@ export default function PayrollPage() {
             </div>
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl font-medium text-sm">
               <FileSpreadsheet size={16} />
               Exporter
@@ -375,7 +375,7 @@ export default function PayrollPage() {
         {/* Payroll Table */}
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="bg-zinc-50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800">
                   <th className="px-6 py-4 text-left">
@@ -553,7 +553,7 @@ export default function PayrollPage() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <select className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm">
                     {months.map(m => (
                       <option key={m} value={m}>{getMonthName(m)}</option>
@@ -616,7 +616,7 @@ export default function PayrollPage() {
                 </p>
                 <p className="text-2xl font-bold text-emerald-600 mt-3">{formatSalary(selectedPayroll.netSalary)}</p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 <button
                   onClick={() => setShowPayModal(false)}
                   className="flex-1 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl font-medium"

@@ -140,7 +140,7 @@ export default async function InvoicesPage({
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
           <div>
-            <h1 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter italic">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tighter italic">
               Facturation<span className="text-[var(--accent)] ml-1">.</span>
             </h1>
             <p className="text-[var(--foreground-muted)] text-[10px] font-black uppercase tracking-[0.3em] mt-2">

@@ -202,7 +202,7 @@ export default function CreateSubscriptionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
         
         {/* HEADER SECTION */}
         <div className="flex items-center gap-3">
@@ -492,7 +492,7 @@ export default function CreateSubscriptionPage() {
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-medium mb-1">Date d'expiration *</label>
                         <div className="relative">

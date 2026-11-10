@@ -67,7 +67,7 @@ export default function TaxCard({ tax, token }: TaxCardProps) {
         </div>
 
         <div className="pt-4 border-t border-zinc-50 dark:border-zinc-800 flex items-baseline gap-1">
-          <span className="text-4xl font-black text-emerald-600">
+          <span className="text-3xl sm:text-4xl font-black text-emerald-600">
             {tax.rate}
           </span>
           <span className="text-lg font-bold text-emerald-600/50">%</span>

@@ -252,6 +252,23 @@ L'image Docker du frontend est fournie (`Dockerfile` à la racine, sortie `stand
 - Les littéraux d'URL corrompus relevés dans l'audit initial ont été vérifiés : les services actuels
   pointent bien vers `/client-groups`, `/api-keys` et `/reports/*`.
 
+## 12 bis. Responsive (mobile / tablette)
+
+- **Navigation** : le tiroir mobile est désormais actif jusqu'à `lg` (avant, la plage 768–1024 px
+  n'avait ni sidebar ni bouton menu). Fermeture par `Échap`, clic sur le fond ou changement de route ;
+  verrouillage du scroll du body, largeur limitée à `85vw`.
+- **Coquille** : hauteur de navbar `h-16` sur mobile, `h-dvh` au lieu de `h-screen` (barres d'URL
+  mobiles), padding de page `p-4 → sm:p-6 → lg:p-8` sur l'ensemble du dashboard (90 fichiers).
+- **Tables** : 23 tableaux passent en défilement horizontal (`min-w-[640px]` + `overflow-x-auto`) au
+  lieu d'écraser les colonnes sur un écran de 360 px.
+- **Titres et grilles** : `text-4xl/5xl` deviennent `text-3xl sm:text-4xl` / `text-4xl sm:text-5xl` ;
+  les grilles de formulaires (`grid-cols-2`) passent en une colonne sur mobile ; les rangées d'actions
+  utilisent `flex-wrap`.
+- **Landing & auth** : hero en pile sur mobile (bento 1 → 3 colonnes, hauteurs minimales), CTA
+  empilables, cartes de connexion/inscription avec padding réduit et titres adaptatifs.
+- Non couvert : aucun test automatisé de rendu visuel (pas de navigateur headless dans l'environnement
+  de CI) ; la validation responsive reste manuelle.
+
 ## 13. Limites connues avant une ouverture publique large
 
 - Aucune intégration PSP réelle (encaissement en ligne) : les passerelles sont configurables mais inactives.

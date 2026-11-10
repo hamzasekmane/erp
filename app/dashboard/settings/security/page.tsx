@@ -203,7 +203,7 @@ export default function SecuritySettingsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -470,7 +470,7 @@ export default function SecuritySettingsPage() {
               {sessions.map((session) => (
                 <div key={session.id} className="p-3 rounded-xl border border-[var(--border)]">
                   <div className="flex items-start justify-between">
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
                       <Monitor size={16} className="text-[var(--foreground-muted)] mt-0.5" />
                       <div>
                         <p className="text-sm font-medium">
@@ -520,7 +520,7 @@ export default function SecuritySettingsPage() {
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[640px]">
                 <thead className="bg-[var(--accent)]/5 border-b border-[var(--border)]">
                   <tr>
                     <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Action</th>
@@ -627,7 +627,7 @@ export default function SecuritySettingsPage() {
               />
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               <button
                 onClick={() => setShow2FASetup(false)}
                 className="flex-1 px-4 py-2 border border-[var(--border)] rounded-xl hover:bg-[var(--accent)]/5 transition-colors"

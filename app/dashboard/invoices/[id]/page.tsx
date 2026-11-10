@@ -261,7 +261,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <div className="flex justify-between items-end py-8 border-y border-[var(--border)]">
                   <div className="flex flex-col">
                     <span className="text-[11px] font-black opacity-40 uppercase tracking-tighter text-[var(--accent)] mb-2">Reste à payer</span>
-                    <span className="text-5xl font-black italic tracking-tighter text-[var(--foreground)]">
+                    <span className="text-3xl sm:text-4xl sm:text-5xl font-black italic tracking-tighter text-[var(--foreground)]">
                       {remainingBalance.toLocaleString()} <small className="text-xs font-bold opacity-30 not-italic">DA</small>
                     </span>
                   </div>

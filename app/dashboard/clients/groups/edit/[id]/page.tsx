@@ -88,7 +88,7 @@ export default async function EditClientGroupPage({ params }: Props) {
           <div className="text-[120px] font-black text-[var(--foreground-muted)]/5 absolute -top-16 -left-5 select-none pointer-events-none">
             {group.name.charAt(0).toUpperCase()}
           </div>
-          <h1 className="text-4xl font-black text-[var(--foreground)] uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl font-black text-[var(--foreground)] uppercase tracking-tighter italic">
             Modifier le groupe
             <span className="text-amber-400 ml-2">•</span>
           </h1>

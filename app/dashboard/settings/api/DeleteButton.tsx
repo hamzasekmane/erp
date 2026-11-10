@@ -38,7 +38,7 @@ export function DeleteButton({ apiKeyId, apiKeyName, onDelete }: DeleteButtonPro
             Êtes-vous sûr de vouloir révoquer la clé API "{apiKeyName}" ? 
             Cette action est irréversible et toutes les intégrations utilisant cette clé cesseront de fonctionner.
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button
               onClick={() => setShowConfirm(false)}
               className="flex-1 px-4 py-2 border border-[var(--border)] rounded-lg hover:bg-[var(--accent)]/5 transition-colors"

@@ -17,7 +17,7 @@ export default async function NewUserPage() {
           <ArrowLeft size={14} strokeWidth={3} /> Back to Personnel
         </Link>
         <div>
-          <h1 className="text-5xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl sm:text-5xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">
             Add <span className="text-indigo-600">Member</span>
           </h1>
           <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] mt-2 ml-1 italic">

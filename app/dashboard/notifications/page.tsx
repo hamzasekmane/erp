@@ -77,7 +77,7 @@ export default async function NotificationsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header with Back Button - Same style as Security page */}
       <div className="flex items-center gap-3">

@@ -78,7 +78,7 @@ export default function NewPaymentPage() {
         {/* Form Section */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] border border-zinc-100 dark:border-zinc-800 shadow-2xl">
-            <h1 className="text-4xl font-black italic uppercase tracking-tighter mb-8">
+            <h1 className="text-3xl sm:text-4xl font-black italic uppercase tracking-tighter mb-8">
               Nouveau <span className="text-blue-600">Paiement</span>
             </h1>
 

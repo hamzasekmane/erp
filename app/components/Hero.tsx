@@ -59,20 +59,20 @@ export default function Hero() {
   }, [nextSlide, prefersReducedMotion, isAutoPlaying]);
 
   return (
-    <main className="relative min-h-screen flex items-center max-w-7xl mx-auto px-6 py-20 overflow-visible">
+    <main className="relative min-h-screen flex items-center max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-20 overflow-visible">
       {/* Background Blobs décoratifs */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-blue-600/5 rounded-full blur-[120px]" />
         <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-red-600/5 rounded-full blur-[120px]" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-16 items-center w-full">
         
         {/* GAUCHE : TEXTE & CTA */}
 {/* SECTION GAUCHE ENVELOPPÉE DANS UN STYLE BENTO */}
-        <div className="bg-slate-50/50 backdrop-blur-sm border border-slate-200/60 rounded-[3.5rem] p-10 lg:p-16 flex flex-col justify-center shadow-sm">
+        <div className="bg-slate-50/50 backdrop-blur-sm border border-slate-200/60 rounded-[2rem] sm:rounded-[3.5rem] p-6 sm:p-10 lg:p-16 flex flex-col justify-center shadow-sm">
 
-          <h1 className="text-5xl md:text-[5rem] font-black tracking-tighter text-gray-900 leading-[0.85] mb-8">
+          <h1 className="text-4xl sm:text-5xl md:text-[5rem] font-black tracking-tighter text-gray-900 leading-[0.9] mb-6 sm:mb-8">
             GÉREZ VOTRE <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-cyan-500 to-[#f43f5e]">
               BUSINESS
@@ -80,18 +80,18 @@ export default function Hero() {
             SANS LIMITES.
           </h1>
 
-          <p className="text-gray-600 text-lg md:text-xl leading-relaxed max-w-lg mb-10 font-medium italic">
+          <p className="text-gray-600 text-base sm:text-lg md:text-xl leading-relaxed max-w-lg mb-8 sm:mb-10 font-medium italic">
             La plateforme tout-en-un pour la facturation, le stock et la croissance de votre entreprise en Algérie.
           </p>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-6">
             <Link
               href="/register"
-              className="px-10 py-5 bg-[#121826] text-white rounded-[2rem] font-black uppercase text-sm tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-gray-900/20"
+              className="px-6 sm:px-10 py-4 sm:py-5 bg-[#121826] text-white rounded-2xl sm:rounded-[2rem] font-black uppercase text-xs sm:text-sm tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl shadow-gray-900/20"
             >
               Essai Gratuit
             </Link>
-            <button className="px-8 py-5 text-gray-900 font-bold text-lg rounded-[2rem] hover:bg-white transition-all group flex items-center gap-2">
+            <button className="px-4 sm:px-8 py-4 sm:py-5 text-gray-900 font-bold text-base sm:text-lg rounded-2xl sm:rounded-[2rem] hover:bg-white transition-all group flex items-center gap-2">
               Voir Démo 
               <FontAwesomeIcon icon={faChevronRight} className="text-xs group-hover:translate-x-1 transition-transform" />
             </button>
@@ -99,13 +99,13 @@ export default function Hero() {
         </div>
 
         {/* DROITE : BENTO GRID AVEC CAROUSEL INTÉGRÉ */}
-        <div className="grid grid-cols-3 grid-rows-2 gap-4 h-[550px] w-full relative perspective-[1200px]">
+        <div className="grid grid-cols-1 sm:grid-cols-3 sm:grid-rows-2 gap-4 sm:h-[550px] w-full relative perspective-[1200px]">
           
           {/* CARTE PRINCIPALE (ROUGE) : CAROUSEL 3D */}
           <motion.div
             onMouseEnter={() => setIsAutoPlaying(false)}
             onMouseLeave={() => setIsAutoPlaying(true)}
-            className="col-span-2 row-span-2 relative overflow-hidden bg-gradient-to-br from-red-500 via-red-600 to-rose-600 rounded-[3.5rem] p-10 shadow-2xl flex flex-col justify-between group"
+            className="col-span-1 sm:col-span-2 sm:row-span-2 relative overflow-hidden bg-gradient-to-br from-red-500 via-red-600 to-rose-600 rounded-[2rem] sm:rounded-[3.5rem] p-6 sm:p-10 min-h-[380px] sm:min-h-0 shadow-2xl flex flex-col justify-between group"
           >
             <div className="relative z-20">
               <h2 className="text-white text-4xl font-black leading-none tracking-tighter uppercase italic">
@@ -156,7 +156,7 @@ export default function Hero() {
           {/* CARTE FINANCE (VERTE) */}
           <motion.div
             whileHover={{ scale: 1.02 }}
-            className="col-span-1 row-span-1 relative overflow-hidden rounded-[2.8rem] bg-[#1a4d2e] group shadow-xl"
+            className="col-span-1 row-span-1 relative overflow-hidden rounded-[2rem] sm:rounded-[2.8rem] bg-[#1a4d2e] min-h-[150px] sm:min-h-0 group shadow-xl"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-emerald-900 opacity-80" />
             <div className="absolute bottom-8 left-8 z-10">
@@ -167,7 +167,7 @@ export default function Hero() {
           </motion.div>
 
           {/* MINI GRID (STOCK & LIVE) */}
-          <div className="col-span-1 row-span-1 grid grid-cols-2 gap-4">
+          <div className="col-span-1 row-span-1 grid grid-cols-2 gap-4 min-h-[120px] sm:min-h-0">
              <div className="rounded-[2.2rem] bg-[#1c1c1e] flex items-center justify-center shadow-lg">
                 <FontAwesomeIcon icon={faBox} className="text-orange-500 text-2xl" />
              </div>

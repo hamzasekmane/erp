@@ -52,7 +52,7 @@ export default async function ArchivedProductsPage() {
   }));
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -123,7 +123,7 @@ export default async function ArchivedProductsPage() {
       {/* Products Table */}
       <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-[var(--accent)]/5 border-b border-[var(--border)]">
               <tr>
                 <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Produit</th>

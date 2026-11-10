@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 
 export default async function NewApiKeyPage() {
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header */}
       <div className="flex items-center gap-3">

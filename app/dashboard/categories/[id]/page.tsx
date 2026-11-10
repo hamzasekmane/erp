@@ -67,7 +67,7 @@ export default async function CategoryDetailPage({ params }: { params: Promise<{
                   <Edit3 size={32} />
                 </div>
                 <div>
-                  <h1 className="text-4xl font-black italic tracking-tighter uppercase leading-none">
+                  <h1 className="text-3xl sm:text-4xl font-black italic tracking-tighter uppercase leading-none">
                     Modifier <span className="text-cyan-600">.</span>
                   </h1>
                   <p className="text-zinc-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">

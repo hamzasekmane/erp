@@ -40,7 +40,7 @@ export default function LoadingNewInvoice() {
         {/* Right Column: Form Skeleton */}
         <div className="lg:col-span-8 bg-white/5 backdrop-blur-sm rounded-[3.5rem] p-8 border border-white/10">
           <div className="space-y-8">
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div className="h-16 bg-white/10 rounded-2xl border border-white/10" />
               <div className="h-16 bg-white/10 rounded-2xl border border-white/10" />
               <div className="h-16 bg-white/10 rounded-2xl border border-white/10" />

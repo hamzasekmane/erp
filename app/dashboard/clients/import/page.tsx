@@ -52,7 +52,7 @@ export default async function ClientImportPage() {
 
       {/* ===== TITRE ===== */}
       <div className="relative">
-        <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic">
+        <h1 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter italic">
           Importer des clients
           <span className="text-emerald-400 ml-2">•</span>
         </h1>

@@ -40,7 +40,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
     <div className="p-4 md:p-8 space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col xl:flex-row gap-6 items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl font-black text-zinc-900 dark:text-white uppercase tracking-tighter italic">
             Inventaire <span className="text-rose-600">.</span>
           </h1>
           <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mt-1">
