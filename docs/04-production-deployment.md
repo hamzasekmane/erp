@@ -401,7 +401,46 @@ est audité avec la signature détectée. Les colonnes `uploads.scan_status`, `s
 | `GET /api/uploads/usage` | `200` avec quota de la formule (`limitMb > 0`), `engine: "builtin"` |
 | Tests unitaires moteur | 9 cas (EICAR, PE, ELF, macro VBA, PDF /Launch et /EmbeddedFile, fichiers propres, règles de quota) |
 
-## 13. Limites connues avant une ouverture publique large
+## 13. Recette « staging » sur PostgreSQL réel
+
+Exécutée le 2026-11-10 contre un **PostgreSQL 16.2** local (binaires embarqués), base dédiée,
+`NODE_ENV=development`, API sur `:4001`, `DATABASE_URL=postgres://erp@127.0.0.1:55432/erp`.
+
+**Séquence appliquée**
+
+```bash
+initdb -D /tmp/pgdata -U erp --auth=trust -E UTF8
+pg_ctl -D /tmp/pgdata -o "-p 55432 -h 127.0.0.1" -l /tmp/pg.log start
+createdb -h 127.0.0.1 -p 55432 -U erp erp
+
+cd server
+DATABASE_URL=postgres://erp@127.0.0.1:55432/erp npx tsx src/db/migrate.ts   # 0000 → 0005
+DATABASE_URL=postgres://erp@127.0.0.1:55432/erp npx tsx src/db/seed.ts
+
+DATABASE_URL=postgres://erp@127.0.0.1:55432/erp PORT=4001 \
+SECRETS_ENCRYPTION_KEY=… UPLOAD_DIR=.data/staging-uploads \
+node -r @swc-node/register src/main.ts
+```
+
+**Résultats**
+
+| Vérification | Résultat |
+| --- | --- |
+| Migrations `0000_init` → `0005_normal_havok` sur PostgreSQL | 6 fichiers appliqués (167 instructions) |
+| Seed démo (tenant, factures, RH, support, archives) | OK |
+| Démarrage API | `db=postgres`, 100+ routes mappées |
+| 19 endpoints (health, dashboard, invoices, clients, produits, paiements, rapports + export CSV, uploads, MFA, Chargily, RH, support, archives, maintenance) | `200` |
+| `POST /invoices` puis `POST /payments` (transactions + séquences de numéros) | `201`, facture soldée, aucun conflit d'unicité |
+| Écriture refusée sans droits (`/admin/outbox/stats` en tenant) | `403 INSUFFICIENT_PERMISSIONS` ; `200` avec le superadmin plateforme |
+| Upload propre / fichier EICAR | `201 clean/builtin` / `422 UPLOAD_INFECTED` |
+| Webhook Chargily : signature erronée / valide / rejeu | `403` / `200 status:"paid"` (facture soldée) / `200 alreadySettled:true` |
+| MFA : `setup` → `enable` → `login` | `200` puis `mfaRequired:true` (challenge, pas de jeton) |
+
+**Incident détecté et corrigé pendant la recette** : `server/.gitignore` contenait le motif `uploads`, qui
+masquait aussi `server/src/modules/uploads/` — le module n'avait donc jamais été versionné (corrigé par
+`4a4a8fd`, motif ancré `/uploads` + ré-inclusion de `src/modules/uploads/**`).
+
+## 14. Limites connues avant une ouverture publique large
 
 - Chargily Pay est intégré et vérifié en mode test local (webhook signé + revérification) mais aucun
   aller-retour réel avec le tableau de bord Chargily n'a été exécuté depuis cet environnement (pas de
@@ -409,5 +448,7 @@ est audité avec la signature détectée. Les colonnes `uploads.scan_status`, `s
 - Superadmin authentifié sur le tenant « platform » : la MFA est disponible (TOTP) mais son caractère
   obligatoire dépend de `MFA_REQUIRE_SUPERADMIN` ; la séparation réseau reste à faire.
 - Antivirus et quotas en place, mais ClamAV n'a pas été exercé contre un vrai démon dans cet
-  environnement (aucun binaire clamd) : la recette INSTREAM reste à faire en staging.
+  environnement (aucun binaire clamd) : la recette INSTREAM reste à faire.
+- Recette staging PostgreSQL faite en local sur PG 16.2 (voir §13) ; restent à valider sur
+  l'infrastructure cible : TLS base, réplication/sauvegardes, `docker-compose` complet et proxy. 
 - Limiteur de débit en mémoire (par instance) et outbox mono-worker.
