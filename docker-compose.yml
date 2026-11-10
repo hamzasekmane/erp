@@ -48,7 +48,9 @@ services:
       dockerfile: Dockerfile
       args:
         # URL publique de l'API vue par le navigateur (ou /api derrière un reverse proxy)
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+        # Proxy same-origin /api -> conteneur api (recommandé derrière un reverse proxy)
+        API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:4000}
     restart: unless-stopped
     depends_on:
       - api

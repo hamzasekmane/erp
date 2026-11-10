@@ -196,6 +196,9 @@ L'image Docker du frontend est fournie (`Dockerfile` à la racine, sortie `stand
   puis `NEXT_PUBLIC_API_URL=/api` — les cookies et le CORS deviennent inutiles.
 - `NEXT_PUBLIC_API_URL` est figée **au build** (variable publique) : choisir l'URL publique de l'API
   (`https://api.example.com/api`) ou `/api` si le reverse proxy route `/api` vers le conteneur `api`.
+- `API_PROXY_TARGET` (aussi figée au build) active le proxy same-origin : Next sert `/api/*` en
+  relayant vers l'API (`http://api:4000` dans Docker). Combinée à `NEXT_PUBLIC_API_URL=/api`, elle
+  supprime le CORS et les appels cross-origin depuis le navigateur.
 - Les actions serveur (`app/actions/*`) utilisent la même URL publique ; pour un appel réseau interne
   (plus rapide), prévoir une variable serveur dédiée lors d'une prochaine itération.
 - Cookies : `token` en `httpOnly`, `Secure`, `SameSite=Lax`.
