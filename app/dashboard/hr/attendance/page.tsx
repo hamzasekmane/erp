@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { listAttendanceAction } from "@/app/actions/hrActions";
 
 interface Attendance {
   id: string;
@@ -61,84 +62,7 @@ export default function AttendancePage() {
   const [itemsPerPage] = useState(10);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
-  const [attendances, setAttendances] = useState<Attendance[]>([
-    {
-      id: "1",
-      employeeId: "EMP001",
-      employeeName: "Ahmed Benali",
-      date: "2024-03-29",
-      checkIn: "08:45",
-      checkOut: "17:30",
-      status: "present",
-      workingHours: 7.75,
-      overtime: 0.5,
-      department: "IT"
-    },
-    {
-      id: "2",
-      employeeId: "EMP002",
-      employeeName: "Fatima Zohra",
-      date: "2024-03-29",
-      checkIn: "09:15",
-      checkOut: "18:00",
-      status: "late",
-      workingHours: 8,
-      overtime: 0,
-      department: "IT",
-      notes: "Retard de 15 minutes"
-    },
-    {
-      id: "3",
-      employeeId: "EMP003",
-      employeeName: "Mohamed Slimani",
-      date: "2024-03-29",
-      checkIn: "08:30",
-      checkOut: "17:00",
-      status: "present",
-      workingHours: 7.5,
-      overtime: 0,
-      department: "Finance"
-    },
-    {
-      id: "4",
-      employeeId: "EMP004",
-      employeeName: "Samira Kaci",
-      date: "2024-03-29",
-      checkIn: "",
-      checkOut: "",
-      status: "absent",
-      workingHours: 0,
-      overtime: 0,
-      department: "Marketing",
-      notes: "Congé maladie"
-    },
-    {
-      id: "5",
-      employeeId: "EMP005",
-      employeeName: "Yacine Boukadoum",
-      date: "2024-03-29",
-      checkIn: "08:30",
-      checkOut: "12:30",
-      status: "half-day",
-      workingHours: 4,
-      overtime: 0,
-      department: "IT",
-      notes: "Départ à midi"
-    },
-    {
-      id: "6",
-      employeeId: "EMP006",
-      employeeName: "Nadia Bensalem",
-      date: "2024-03-29",
-      checkIn: "",
-      checkOut: "",
-      status: "holiday",
-      workingHours: 0,
-      overtime: 0,
-      department: "Finance",
-      notes: "Congé annuel"
-    }
-  ]);
+  const [attendances, setAttendances] = useState<Attendance[]>([]);
 
   const departments = [...new Set(attendances.map(a => a.department))];
 
@@ -152,6 +76,40 @@ export default function AttendancePage() {
     totalWorkingHours: attendances.reduce((sum, a) => sum + a.workingHours, 0),
     totalOvertime: attendances.reduce((sum, a) => sum + a.overtime, 0)
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const result = await listAttendanceAction();
+      if (cancelled) return;
+      if (result.success) {
+        setAttendances(result.records.map((record) => {
+          const hours = record.checkIn && record.checkOut
+            ? Math.max(0, (Number(record.checkOut.slice(0, 2)) * 60 + Number(record.checkOut.slice(3, 5)) - (Number(record.checkIn.slice(0, 2)) * 60 + Number(record.checkIn.slice(3, 5)))) / 60)
+            : 0;
+          return {
+            id: record.id,
+            employeeId: record.employeeId,
+            employeeName: record.employeeName || "—",
+            date: record.date,
+            checkIn: record.checkIn ?? "",
+            checkOut: record.checkOut ?? "",
+            status: (["present", "absent", "late", "half-day", "holiday"].includes(record.status) ? record.status : "present") as Attendance["status"],
+            workingHours: Number(hours.toFixed(2)),
+            overtime: hours > 8 ? Number((hours - 8).toFixed(2)) : 0,
+            department: "—",
+          };
+        }));
+      } else {
+        toast.error(result.message || "Impossible de charger les présences");
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     filterAttendances();
@@ -228,7 +186,7 @@ export default function AttendancePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900">
-      <div className="p-6 md:p-8 space-y-8">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -247,7 +205,7 @@ export default function AttendancePage() {
             </div>
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl font-medium text-sm">
               <Download size={16} />
               Exporter
@@ -410,7 +368,7 @@ export default function AttendancePage() {
         {/* Attendance Table */}
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="bg-zinc-50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800">
                   <th className="px-6 py-4 text-left">
@@ -542,7 +500,7 @@ export default function AttendancePage() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Type</label>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
                     <label className="flex-1 flex items-center justify-center gap-2 p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800">
                       <input type="radio" name="type" value="checkin" defaultChecked className="w-4 h-4" />
                       <span className="text-sm">Arrivée</span>

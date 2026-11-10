@@ -51,7 +51,7 @@ const { currentUsers, usedStorageGB, currentMonthInvoices } = currentUsage;
   const invoicesPercent = Math.min(100, (currentMonthInvoices / subscription.limits.invoices) * 100);
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <Link href="/dashboard" className="p-2 hover:bg-[var(--accent)]/10 rounded-xl transition-colors group">
@@ -216,7 +216,7 @@ const { currentUsers, usedStorageGB, currentMonthInvoices } = currentUsage;
           <div className="p-8 text-center text-[var(--foreground-muted)] text-sm">Aucune facture trouvée.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead className="bg-[var(--background)]/50 border-b border-[var(--border)]">
                 <tr>
                   <th className="p-4 text-left text-[10px] font-black uppercase">N° Facture</th>

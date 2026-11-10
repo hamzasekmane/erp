@@ -1,5 +1,6 @@
 "use server";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -31,7 +32,7 @@ async function getToken() {
 }
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  apiBaseUrl();
 
 // ========================
 // ✅ FETCH API KEYS

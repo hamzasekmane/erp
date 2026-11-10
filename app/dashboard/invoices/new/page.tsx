@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -53,7 +54,7 @@ export default async function NewInvoicePage() {
     );
   }
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const API_URL = apiBaseUrl();
 
   if (IS_DEV) {
     console.log("🔍 Fetching clients and products...");
@@ -237,7 +238,7 @@ export default async function NewInvoicePage() {
                 
                 {/* Titre */}
                 <div className="space-y-3">
-                  <h1 className="text-4xl md:text-5xl lg:text-6xl font-black italic uppercase tracking-tighter leading-tight text-[var(--foreground)]">
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black italic uppercase tracking-tighter leading-tight text-[var(--foreground)]">
                     Créer une <br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-[var(--accent)] to-blue-400">
                       Facture
@@ -277,7 +278,7 @@ export default async function NewInvoicePage() {
                 <div className="relative group">
                   <div className="absolute -inset-1 bg-gradient-to-r from-[var(--accent)]/20 to-blue-500/20 rounded-[2.5rem] blur-xl opacity-25 group-hover:opacity-50 transition duration-1000"></div>
                   <div className="relative bg-gradient-to-br from-[var(--gradient-from)] to-[var(--gradient-to)] backdrop-blur-md border border-[var(--border)] rounded-[2.5rem] overflow-hidden shadow-2xl">
-                    <div className="p-6 md:p-8">
+                    <div className="p-4 sm:p-6 lg:p-8">
                       
                       {/* ✅ Messages d'avertissement */}
                       {clientsError && (

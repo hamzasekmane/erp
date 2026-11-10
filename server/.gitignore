@@ -1,0 +1,12 @@
+node_modules
+dist
+.data
+/uploads
+!src/modules/uploads/**
+coverage
+*.log
+.env
+.env.*
+!.env.example
+!.env.production.example
+.DS_Store

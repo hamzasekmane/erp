@@ -22,6 +22,8 @@ import {
 import Link from "next/link";
 import { paymentService } from "@/app/services/paymentServices";
 import { PaymentClient } from "./PaymentClient";
+import ChargilyGatewayCard from "@/app/components/ChargilyGatewayCard";
+import { serverApi } from "@/app/lib/serverApi";
 
 export const metadata: Metadata = {
   title: "Velora ERP | Paramètres de paiement",
@@ -48,15 +50,20 @@ interface PaymentGateway {
 
 interface PaymentStats {
   summary?: {
-    totalAmount: number;
-    totalCount: number;
-    successRate: number;
-    averageAmount: number;
+    totalAmount?: number;
+    total?: number;
+    totalCount?: number;
+    count?: number;
+    successRate?: number;
+    averageAmount?: number;
+    reconciled?: number;
+    period?: string;
   };
   methods?: Array<{
     method: string;
     count: number;
-    amount: number;
+    amount?: number;
+    total?: number;
   }>;
   daily?: Array<{
     date: string;
@@ -85,6 +92,14 @@ const getGatewayIcon = (code: string, isActive: boolean) => {
 export default async function PaymentSettingsPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get("token")?.value || "";
+
+  const chargilyStatus = await serverApi<{
+    configured: boolean;
+    mode: "test" | "live";
+    source: "tenant" | "platform" | "none";
+    webhookPath: string;
+    secretsEncryption: boolean;
+  }>("/payments/chargily/status");
 
   // Fetch payment gateways
   let gateways: PaymentGateway[] = [];
@@ -168,13 +183,13 @@ export default async function PaymentSettingsPage() {
   const displayGateways = gateways.length > 0 ? gateways : defaultGateways;
   
   // Extract stats values with fallbacks
-  const totalAmount = stats.summary?.totalAmount || 24580;
-  const totalCount = stats.summary?.totalCount || 124;
-  const successRate = stats.summary?.successRate || 98.5;
-  const averageAmount = stats.summary?.averageAmount || (totalAmount / totalCount).toFixed(2);
+  const totalAmount = stats.summary?.totalAmount ?? stats.summary?.total ?? 0;
+  const totalCount = stats.summary?.totalCount ?? stats.summary?.count ?? 0;
+  const successRate = stats.summary?.successRate;
+  const averageAmount = stats.summary?.averageAmount ?? (totalCount > 0 ? totalAmount / totalCount : 0);
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -232,7 +247,7 @@ export default async function PaymentSettingsPage() {
             <span className="text-[8px] font-mono text-[var(--foreground-muted)]">TOTAL</span>
           </div>
           <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Montant total</p>
-          <p className="text-2xl font-black text-emerald-500">{totalAmount.toLocaleString()} €</p>
+          <p className="text-2xl font-black text-emerald-500">{totalAmount.toLocaleString()} DA</p>
           <p className="text-[8px] text-[var(--foreground-muted)]">Toutes transactions confondues</p>
         </div>
 
@@ -244,7 +259,7 @@ export default async function PaymentSettingsPage() {
             <span className="text-[8px] font-mono text-[var(--foreground-muted)]">SUCCESS</span>
           </div>
           <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Taux de succès</p>
-          <p className="text-2xl font-black text-blue-500">{successRate}%</p>
+          <p className="text-2xl font-black text-blue-500">{successRate !== undefined ? `${successRate}%` : "—"}</p>
           <p className="text-[8px] text-[var(--foreground-muted)]">Transactions réussies</p>
         </div>
 
@@ -256,7 +271,7 @@ export default async function PaymentSettingsPage() {
             <span className="text-[8px] font-mono text-[var(--foreground-muted)]">AVERAGE</span>
           </div>
           <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Montant moyen</p>
-          <p className="text-2xl font-black text-purple-500">{averageAmount} €</p>
+          <p className="text-2xl font-black text-purple-500">{Number(averageAmount).toLocaleString()} DA</p>
           <p className="text-[8px] text-[var(--foreground-muted)]">Par transaction</p>
         </div>
 
@@ -287,7 +302,7 @@ export default async function PaymentSettingsPage() {
                   <p className="text-sm font-medium">{method.method}</p>
                   <p className="text-xs text-[var(--foreground-muted)]">{method.count} transactions</p>
                 </div>
-                <p className="text-lg font-black text-emerald-500">{method.amount.toLocaleString()} €</p>
+                <p className="text-lg font-black text-emerald-500">{(method.amount ?? method.total ?? 0).toLocaleString()} DA</p>
               </div>
             ))}
           </div>
@@ -378,6 +393,8 @@ export default async function PaymentSettingsPage() {
       </div>
 
       {/* CLIENT COMPONENT FOR INTERACTIVE ACTIONS */}
+      <ChargilyGatewayCard token={token} initialStatus={chargilyStatus} />
+
       <PaymentClient gateways={displayGateways} stats={stats} token={token} />
     </div>
   );

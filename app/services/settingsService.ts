@@ -1,11 +1,13 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 // app/services/settingsService.ts
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   error?: string;
+  error_code?: string;
   message?: string;
 }
 

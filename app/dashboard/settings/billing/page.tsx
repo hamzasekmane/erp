@@ -143,7 +143,7 @@ export default async function BillingSettingsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -239,7 +239,7 @@ export default async function BillingSettingsPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               <button className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl transition-all font-medium text-sm">
                 Changer de plan
               </button>
@@ -340,7 +340,7 @@ export default async function BillingSettingsPage() {
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-[var(--accent)]/5 border-b border-[var(--border)]">
               <tr>
                 <th className="text-left p-4 text-xs font-black uppercase tracking-wider">N° Facture</th>

@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { cookies } from "next/headers";
 import { productsService } from "@/app/services/products.Service";
 import { taxService } from "@/app/services/taxService";
@@ -27,7 +28,7 @@ interface SubscriptionError {
 }
 
 const IS_DEV = process.env.NODE_ENV === "development";
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 async function checkSubscriptionExpired(response: Response): Promise<SubscriptionError | null> {
   if (response.status === 403) {
@@ -169,7 +170,7 @@ export default async function NewProductPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
         
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -186,7 +187,7 @@ export default async function NewProductPage() {
                 <PackagePlus size={28} />
               </div>
               <div>
-                <h1 className="text-4xl md:text-5xl font-black italic tracking-tighter uppercase leading-none text-[var(--foreground)]">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic tracking-tighter uppercase leading-none text-[var(--foreground)]">
                   Nouveau <span className="text-[var(--accent)]">Produit</span>
                 </h1>
                 <p className="text-[var(--foreground-muted)] font-bold text-[10px] uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
@@ -229,7 +230,7 @@ export default async function NewProductPage() {
               <div className="absolute top-0 right-0 p-16 opacity-[0.03] dark:opacity-[0.05] pointer-events-none rotate-12 select-none">
                 <Box size={300} />
               </div>
-              <div className="p-6 md:p-8 relative z-10">
+              <div className="p-4 sm:p-6 lg:p-8 relative z-10">
                 <ProductForm 
                   categories={categories} 
                   taxes={taxes} 

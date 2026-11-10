@@ -218,7 +218,7 @@ export default function BackupPage() {
   const storagePercentage = (storage.used / storage.total) * 100;
 
   return (
-    <div className="p-6 md:p-8 space-y-8 animate-in fade-in duration-700">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8 animate-in fade-in duration-700">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -237,7 +237,7 @@ export default function BackupPage() {
           </div>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => createBackup("database")}
             disabled={creating}
@@ -621,7 +621,7 @@ export default function BackupPage() {
                   <option key={b.id}>{b.name} - {formatDate(b.createdAt)}</option>
                 ))}
               </select>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 <button className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-medium transition-colors">
                   Restaurer la sauvegarde
                 </button>

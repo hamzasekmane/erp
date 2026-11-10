@@ -1,5 +1,6 @@
 "use server";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
@@ -45,7 +46,7 @@ async function apiRequest<T = any>(
   options: RequestInit = {}
 ): Promise<ApiResponse> {
   const token = await getAuthToken();
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const baseUrl = apiBaseUrl();
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -238,7 +239,7 @@ export async function sendInvoiceReminderAction(_prevState: any, id: string) {
 export async function downloadPdfAction(id: string): Promise<{ success: boolean; blob?: Blob; message?: string }> {
   const token = await getAuthToken();
   if (!token) return { success: false, message: "Session expirée" };
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+  const baseUrl = apiBaseUrl();
   try {
     const res = await fetch(`${baseUrl}/invoices/${id}/pdf`, {
       headers: { Authorization: `Bearer ${token}` },

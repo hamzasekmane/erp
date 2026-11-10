@@ -124,7 +124,7 @@ export default async function PaymentReportsPage() {
   // 5. Main layout with gradient background
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
         
         {/* Header with Actions */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">

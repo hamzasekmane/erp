@@ -1,9 +1,10 @@
 "use server";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 /**
  * Récupère les headers d'authentification centralisés
@@ -77,7 +78,7 @@ function validatePhoneNumber(phone: string | null | undefined): string | undefin
 }
 
 type ActionResponse = {
-  message: string;
+  message?: string;
   success?: boolean;
   error?: string;
   data?: any;

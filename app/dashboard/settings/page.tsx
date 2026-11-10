@@ -111,7 +111,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
         
         {/* HEADER SECTION */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -140,7 +140,7 @@ export default async function SettingsPage() {
           </div>
           
           {/* Quick stats */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <div className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-center">
               <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase">Version</p>
               <p className="text-sm font-black text-[var(--accent)]">v2.0.0</p>

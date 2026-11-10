@@ -16,6 +16,12 @@ import {
 } from './analytics.mapper';
 import { normalizeTrafficSourceReport, DEFAULT_TRAFFIC_SOURCE_REPORT, TrafficSourceReportData } from './analytics.mapper';
 
+/** The API wraps payloads as { success, data }; normalizers expect the payload itself. */
+function unwrapReport(result: any) {
+  if (result && typeof result === 'object' && 'data' in result && 'success' in result) return result.data;
+  return result;
+}
+
 const analyticsService = {
   /**
    * Récupérer le rapport de ventes
@@ -23,7 +29,7 @@ const analyticsService = {
   async getSalesReport(token: string, params: SalesReportParams) {
     try {
       const result = await analyticsApi.fetchSalesReport(token, params);
-      return normalizeSalesReport(result);
+      return normalizeSalesReport(unwrapReport(result));
     } catch (error) {
       console.error('❌ Error fetching sales report:', error);
       return DEFAULT_SALES_REPORT; // Fallback sécurisé
@@ -36,7 +42,7 @@ const analyticsService = {
   async getPaymentReport(token: string, params: any) {
     try {
       const result = await analyticsApi.fetchPaymentReport(token, params);
-      return normalizePaymentReport(result);
+      return normalizePaymentReport(unwrapReport(result));
     } catch (error) {
       console.error('❌ Error fetching payment report:', error);
       return DEFAULT_PAYMENT_REPORT;
@@ -49,7 +55,7 @@ const analyticsService = {
   async getClientReport(token: string, params: any) {
     try {
       const result = await analyticsApi.fetchClientReport(token, params);
-      return normalizeClientReport(result);
+      return normalizeClientReport(unwrapReport(result));
     } catch (error) {
       console.error('❌ Error fetching client report:', error);
       return DEFAULT_CLIENT_REPORT;
@@ -62,7 +68,7 @@ const analyticsService = {
   async getProductReport(token: string, params: any) {
     try {
       const result = await analyticsApi.fetchProductReport(token, params);
-      return normalizeProductReport(result);
+      return normalizeProductReport(unwrapReport(result));
     } catch (error) {
       console.error('❌ Error fetching product report:', error);
       return DEFAULT_PRODUCT_REPORT;
@@ -75,7 +81,7 @@ const analyticsService = {
   async getAgingReport(token: string) {
     try {
       const result = await analyticsApi.fetchAgingReport(token);
-      return normalizeAgingReport(result);
+      return normalizeAgingReport(unwrapReport(result));
     } catch (error) {
       console.error('❌ Error fetching aging report:', error);
       return DEFAULT_AGING_REPORT;
@@ -97,7 +103,7 @@ const analyticsService = {
   async getTrafficSources(token: string, params?: { startDate?: string; endDate?: string }): Promise<TrafficSourceReportData> {
   try {
     const result = await analyticsApi.fetchTrafficSources(token, params);
-    return normalizeTrafficSourceReport(result);
+    return normalizeTrafficSourceReport(unwrapReport(result));
   } catch (error) {
     console.error('❌ Error fetching traffic sources:', error);
     return DEFAULT_TRAFFIC_SOURCE_REPORT;

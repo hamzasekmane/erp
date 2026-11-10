@@ -1,9 +1,12 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+import { apiBaseUrl } from "@/app/lib/apiBase";
+const API_URL = apiBaseUrl();
 
 export interface ClientNote {
   _id: string;
+  title?: string;
   clientId: string | any;
   content: string;
+  isPinned?: boolean;
   type: 'general' | 'important' | 'reminder' | 'follow-up';
   createdBy: string;
   createdAt: string;
@@ -83,6 +86,16 @@ export const clientNoteService = {
       };
     } catch (error) {
       throw error;
+    }
+  },
+
+  async getNoteById(id: string, token: string): Promise<ClientNote | null> {
+    try {
+      const result = await apiFetch<any>(`/client-notes/${id}`, token);
+      return result.data ?? null;
+    } catch (error) {
+      console.error(`Error in getNoteById ${id}:`, error);
+      return null;
     }
   },
 

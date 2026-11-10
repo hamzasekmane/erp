@@ -1,27 +1,104 @@
 "use client";
-import { useActionState, useEffect } from "react";
-import { loginAction } from "@/app/actions/loginAction";
+import { useActionState, useEffect, useState } from "react";
+import { loginAction, mfaVerifyAction } from "@/app/actions/loginAction";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Mail, Lock, ArrowRight, ShieldCheck } from "lucide-react";
+import { Loader2, Mail, Lock, ArrowRight, ShieldCheck, KeyRound } from "lucide-react";
 import toast from "react-hot-toast";
 import { motion } from "framer-motion";
 
-const initialState = { success: false, message: "", errors: {} };
+const initialState: any = { success: false, message: "", errors: {} };
 
 export default function LoginForm() {
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
+  const [mfaState, mfaFormAction, mfaPending] = useActionState(mfaVerifyAction, initialState);
+  const [challenge, setChallenge] = useState<string>("");
   const router = useRouter();
 
+  const mfaRequired = Boolean(mfaState?.mfaRequired || state?.mfaRequired);
+
   useEffect(() => {
-    if (state.success) {
+    if (state?.challengeToken) setChallenge(state.challengeToken);
+    if (state?.success || mfaState?.success) {
       toast.success("Authentification réussie. Bienvenue sur Velora.");
       router.push("/dashboard");
       router.refresh();
-    } else if (state.message) {
+    } else if (state?.message && !state?.mfaRequired) {
       toast.error(state.message);
     }
-  }, [state, router]);
+  }, [state, mfaState, router]);
+
+  useEffect(() => {
+    if (mfaState?.challengeToken) setChallenge(mfaState.challengeToken);
+    if (mfaState?.message && mfaRequired) toast.error(mfaState.message);
+  }, [mfaState, mfaRequired]);
+
+  if (mfaRequired) {
+    return (
+      <motion.form
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        action={mfaFormAction}
+        className="space-y-6 w-full"
+      >
+        <input type="hidden" name="challengeToken" value={challenge} />
+
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+          <ShieldCheck size={18} className="text-blue-400 shrink-0" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-300">
+            Double authentification requise
+          </p>
+        </div>
+
+        <div className="space-y-2 group">
+          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-2 ml-1">
+            <KeyRound size={12} strokeWidth={3} /> Code à 6 chiffres
+          </label>
+          <input
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            autoFocus
+            placeholder="000000"
+            className="w-full p-4 bg-zinc-900/40 border border-white/5 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 outline-none transition-all placeholder:text-zinc-700 text-2xl font-black tracking-[0.5em] text-center text-white backdrop-blur-sm"
+            required
+          />
+          <p className="text-[9px] text-zinc-600 leading-relaxed px-1">
+            Ouvrez votre application d'authentification (Google Authenticator, Authy, 1Password) et saisissez le
+            code courant. Le ticket de vérification expire après 5 minutes.
+          </p>
+        </div>
+
+        <button
+          type="submit"
+          disabled={mfaPending || !challenge}
+          className={`relative w-full p-5 rounded-2xl font-black uppercase text-[11px] tracking-[0.2em] transition-all duration-500 flex justify-center items-center gap-3 overflow-hidden ${
+            mfaPending || !challenge ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-white text-black hover:bg-blue-600 hover:text-white"
+          }`}
+        >
+          {mfaPending ? (
+            <>
+              <Loader2 className="animate-spin h-4 w-4" /> Vérification...
+            </>
+          ) : (
+            <>
+              Valider le code <ArrowRight size={16} strokeWidth={3} />
+            </>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="w-full text-[10px] font-black uppercase tracking-widest text-zinc-600 hover:text-blue-400 transition-colors"
+        >
+          Revenir à la connexion
+        </button>
+      </motion.form>
+    );
+  }
 
   return (
     <motion.form 

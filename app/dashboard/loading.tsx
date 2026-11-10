@@ -141,7 +141,7 @@ export default function DashboardLoading() {
             
             <div className="bg-gradient-to-br from-white/5 to-white/0 backdrop-blur-md border border-white/10 rounded-3xl overflow-hidden">
               {/* Table Header */}
-              <div className="grid grid-cols-5 gap-4 p-5 bg-white/5 border-b border-white/10">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-5 bg-white/5 border-b border-white/10">
                 {[...Array(5)].map((_, i) => (
                   <div key={i} className="h-3 w-16 bg-white/10 rounded-full"></div>
                 ))}
@@ -149,7 +149,7 @@ export default function DashboardLoading() {
               
               {/* Table Rows */}
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="grid grid-cols-5 gap-4 p-5 border-b border-white/5 last:border-0">
+                <div key={i} className="grid grid-cols-2 sm:grid-cols-5 gap-4 p-5 border-b border-white/5 last:border-0">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-white/5 rounded-lg"></div>
                     <div className="h-4 w-20 bg-white/10 rounded"></div>

@@ -34,7 +34,7 @@ export default async function TaxRatesPage() {
             <ArrowLeft size={12} className="group-hover:-translate-x-1 transition-transform" /> 
             Retour au catalogue
           </Link>
-          <h1 className="text-4xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
             Configurations <span className="text-emerald-500 text-shadow-sm">TVA</span>
           </h1>
           <p className="text-xs text-zinc-500 font-medium italic">

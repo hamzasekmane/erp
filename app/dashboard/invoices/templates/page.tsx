@@ -39,7 +39,7 @@ export default function TemplatesPage() {
         
         {/* HEADER */}
         <div className="flex flex-col gap-2">
-          <h1 className="text-5xl font-black italic uppercase tracking-tighter text-[var(--foreground)] leading-none">
+          <h1 className="text-3xl sm:text-4xl sm:text-5xl font-black italic uppercase tracking-tighter text-[var(--foreground)] leading-none">
             Modèles<span className="text-[var(--accent)]">.</span>
           </h1>
           <p className="text-[var(--foreground-muted)] text-xs font-black uppercase tracking-[0.3em] italic opacity-70">

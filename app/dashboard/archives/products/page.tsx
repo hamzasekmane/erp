@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { serverApi } from "@/app/lib/serverApi";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -28,32 +29,30 @@ interface ArchivedProduct {
   status: "archived" | "pending_deletion";
 }
 
+interface ArchivedRow {
+  id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  size?: number;
+  createdAt?: string;
+}
+
 export default async function ArchivedProductsPage() {
-  const archivedProducts: ArchivedProduct[] = [
-    {
-      id: "1",
-      name: "Smartphone X100",
-      sku: "PHN-001",
-      category: "Électronique",
-      price: 699.00,
-      stock: 0,
-      archivedDate: "2024-01-15",
-      status: "archived",
-    },
-    {
-      id: "2",
-      name: "Tablette Pro",
-      sku: "TAB-002",
-      category: "Électronique",
-      price: 499.00,
-      stock: 0,
-      archivedDate: "2024-01-20",
-      status: "archived",
-    },
-  ];
+  const rows = (await serverApi<ArchivedRow[]>("/archives/documents?category=product&limit=100")) ?? [];
+  const archivedProducts: ArchivedProduct[] = rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    sku: "—",
+    category: row.category ?? "product",
+    price: 0,
+    stock: 0,
+    archivedDate: (row.createdAt ?? "").slice(0, 10),
+    status: "archived" as const,
+  }));
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -124,7 +123,7 @@ export default async function ArchivedProductsPage() {
       {/* Products Table */}
       <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-[var(--accent)]/5 border-b border-[var(--border)]">
               <tr>
                 <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Produit</th>

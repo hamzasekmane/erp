@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { serverApi } from "@/app/lib/serverApi";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -28,42 +29,31 @@ interface ArchivedInvoice {
   status: "archived" | "pending_deletion";
 }
 
+interface ArchivedRow {
+  id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+  size?: number;
+  createdAt?: string;
+}
+
 export default async function ArchivedInvoicesPage() {
-  // Mock data - replace with real API call
-  const archivedInvoices: ArchivedInvoice[] = [
-    {
-      id: "1",
-      number: "INV-2023-001",
-      client: "Tech Solutions SARL",
-      amount: 1250.00,
-      date: "2023-01-15",
-      archivedDate: "2024-01-15",
-      status: "archived",
-    },
-    {
-      id: "2",
-      number: "INV-2023-002",
-      client: "Digital Agency Pro",
-      amount: 890.50,
-      date: "2023-02-20",
-      archivedDate: "2024-02-20",
-      status: "archived",
-    },
-    {
-      id: "3",
-      number: "INV-2023-003",
-      client: "Consulting Group",
-      amount: 3200.00,
-      date: "2023-03-10",
-      archivedDate: "2024-03-10",
-      status: "pending_deletion",
-    },
-  ];
+  const rows = (await serverApi<ArchivedRow[]>("/archives/documents?category=invoice&limit=100")) ?? [];
+  const archivedInvoices: ArchivedInvoice[] = rows.map((row) => ({
+    id: row.id,
+    number: row.name,
+    client: row.description ?? "—",
+    amount: 0,
+    date: (row.createdAt ?? "").slice(0, 10),
+    archivedDate: (row.createdAt ?? "").slice(0, 10),
+    status: "archived" as const,
+  }));
 
   const totalAmount = archivedInvoices.reduce((sum, inv) => sum + inv.amount, 0);
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -94,7 +84,7 @@ export default async function ArchivedInvoicesPage() {
           </div>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button className="px-4 py-2 text-sm bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500/20 transition-colors flex items-center gap-2">
             <RefreshCw size={14} />
             Exporter tout
@@ -143,7 +133,7 @@ export default async function ArchivedInvoicesPage() {
       {/* Invoices Table */}
       <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-[var(--accent)]/5 border-b border-[var(--border)]">
               <tr>
                 <th className="text-left p-4 text-xs font-black uppercase tracking-wider">N° Facture</th>

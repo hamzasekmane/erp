@@ -52,6 +52,16 @@ export default function Navbar({ user }: NavbarProps) {
     };
   }, [isMobileMenuOpen]);
 
+  // Fermer le tiroir mobile avec la touche Échap
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobileMenuOpen]);
+
   // Get breadcrumb segments
   const segments = pathname
     .split("/")
@@ -91,7 +101,7 @@ export default function Navbar({ user }: NavbarProps) {
 
   return (
     <>
-      <header className="h-20 bg-[var(--navbar-bg)] backdrop-blur-md border-b border-[var(--border)] sticky top-0 z-30 px-4 md:px-8 flex items-center justify-between transition-all duration-300">
+      <header className="h-16 md:h-20 bg-[var(--navbar-bg)] backdrop-blur-md border-b border-[var(--border)] sticky top-0 z-30 px-3 sm:px-4 md:px-8 flex items-center justify-between gap-2 transition-all duration-300">
         
         {/* ===== LEFT SECTION ===== */}
         <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
@@ -99,14 +109,14 @@ export default function Navbar({ user }: NavbarProps) {
           {/* BOUTON MENU MOBILE */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 text-[var(--foreground)] hover:bg-[var(--accent)]/10 rounded-xl transition-colors"
+            className="lg:hidden shrink-0 p-2 text-[var(--foreground)] hover:bg-[var(--accent)]/10 rounded-xl transition-colors"
             aria-label="Menu"
           >
             {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
 
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-1.5 md:gap-2 text-[var(--foreground-muted)] overflow-x-auto custom-scrollbar pb-1">
+          <div className="hidden sm:flex items-center gap-1.5 md:gap-2 text-[var(--foreground-muted)] overflow-x-auto custom-scrollbar pb-1 min-w-0">
             
             {/* Dashboard Root */}
             <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
@@ -233,7 +243,7 @@ export default function Navbar({ user }: NavbarProps) {
             {/* Logout Button (Mobile) */}
             <button
               onClick={handleLogout}
-              className="md:hidden p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+              className="sm:hidden p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
               aria-label="Logout"
             >
               <LogOut size={16} />
@@ -244,7 +254,7 @@ export default function Navbar({ user }: NavbarProps) {
 
       {/* ===== MOBILE DRAWER OVERLAY ===== */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
@@ -254,7 +264,7 @@ export default function Navbar({ user }: NavbarProps) {
           
           {/* Sidebar Container */}
           <div 
-            className="absolute left-0 top-0 bottom-0 w-[280px] bg-[var(--background)] shadow-2xl overflow-y-auto"
+            className="absolute left-0 top-0 bottom-0 w-[280px] max-w-[85vw] bg-[var(--background)] shadow-2xl overflow-y-auto"
             style={{ animation: 'slideInLeft 0.3s ease forwards' }}
           >
             <Sidebar user={user} />

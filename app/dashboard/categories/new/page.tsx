@@ -28,7 +28,7 @@ export default function NewCategoryPage() {
           </div>
           
           <div className="space-y-4">
-            <h1 className="text-4xl font-black italic uppercase tracking-tighter leading-[0.9] text-zinc-900 dark:text-white">
+            <h1 className="text-3xl sm:text-4xl font-black italic uppercase tracking-tighter leading-[0.9] text-zinc-900 dark:text-white">
               Créer un <br /> <span className="text-cyan-600">Nouveau Segment</span>
             </h1>
             <p className="text-zinc-500 font-bold text-xs uppercase leading-relaxed tracking-tight">

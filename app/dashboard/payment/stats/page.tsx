@@ -23,7 +23,7 @@ export default async function PaymentStatsPage() {
   return (
     <div className="p-8 space-y-10 animate-in fade-in duration-700">
       <div className="space-y-2">
-        <h1 className="text-5xl font-black italic uppercase tracking-tighter">Analyse <span className="text-blue-600">Financière</span></h1>
+        <h1 className="text-3xl sm:text-4xl sm:text-5xl font-black italic uppercase tracking-tighter">Analyse <span className="text-blue-600">Financière</span></h1>
         <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.3em] italic">Performance des revenus en temps réel</p>
       </div>
 

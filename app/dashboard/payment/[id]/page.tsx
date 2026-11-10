@@ -29,7 +29,7 @@ export default async function PaymentDetailsPage({ params }: { params: Promise<{
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6 animate-in fade-in duration-500">
         
         {/* Header Actions */}
         <div className="flex justify-between items-center">

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -93,7 +94,7 @@ export default function ImportForm({ token }: ImportFormProps) {
     // ✅ Solution 2: Solution de secours avec fetch direct
     try {
       console.log("📡 Utilisation de la solution de secours");
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const API_URL = apiBaseUrl();
       const url = `${API_URL}/clients/import/template`;
       
       const res = await fetch(url, {

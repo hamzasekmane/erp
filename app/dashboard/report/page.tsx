@@ -134,7 +134,7 @@ export default function ReportsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
         
         {/* HEADER SECTION */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -231,7 +231,7 @@ export default function ReportsPage() {
                   </p>
 
                   {report.metrics && (
-                    <div className="grid grid-cols-3 gap-2 py-4 border-t border-[var(--border)]">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 py-4 border-t border-[var(--border)]">
                       {report.metrics.map((metric, idx) => (
                         <div key={idx} className="text-center">
                           <p className="text-[9px] font-black text-[var(--foreground-muted)] uppercase tracking-tighter mb-1">{metric.label}</p>

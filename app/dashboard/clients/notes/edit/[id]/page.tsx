@@ -86,7 +86,7 @@ export default async function EditClientNotePage({ params }: Props) {
 
       {/* ===== TITRE ===== */}
       <div className="relative">
-        <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic">
+        <h1 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter italic">
           Modifier la note
           <span className="text-amber-400 ml-2">•</span>
         </h1>

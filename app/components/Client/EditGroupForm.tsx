@@ -1,11 +1,12 @@
 "use client";
 
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Save, X, AlertCircle, Check, Layers } from "lucide-react";
 import { toast } from "sonner";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 interface EditGroupFormProps {
   groupId: string;

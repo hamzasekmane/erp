@@ -104,7 +104,7 @@ export default async function ClientGroupDetailsPage({ params }: Props) {
           <div className="text-[200px] font-black text-[var(--foreground-muted)]/5 absolute -top-20 -left-10 select-none pointer-events-none">
             {group.name.charAt(0).toUpperCase()}
           </div>
-          <h1 className="text-5xl font-black text-[var(--foreground)] uppercase tracking-tighter mb-2">
+          <h1 className="text-3xl sm:text-4xl sm:text-5xl font-black text-[var(--foreground)] uppercase tracking-tighter mb-2">
             {group.name}
           </h1>
           {group.description && (

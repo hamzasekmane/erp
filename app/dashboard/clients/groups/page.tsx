@@ -106,7 +106,7 @@ export default async function ClientGroupsPage() {
                 <Layers size={24} className="text-[var(--accent)]" />
               </div>
               <div>
-                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
                   Groupes de
                   <span className="text-[var(--accent)] ml-2">Clients</span>
                   <span className="text-[var(--accent)]">.</span>

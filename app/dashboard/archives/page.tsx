@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { serverApi } from "@/app/lib/serverApi";
 import {
   Archive,
   FileText,
@@ -28,14 +29,29 @@ interface ArchiveSection {
 }
 
 export default async function ArchivesPage() {
-  // Mock counts - replace with real API calls
+  const stats = await serverApi<{ totalDocuments: number; byCategory: Array<{ category: string; count: number }> }>("/archives/stats");
+  const countFor = (category: string) => stats?.byCategory.find((row) => row.category === category)?.count ?? 0;
+  const documents = (await serverApi<Array<{ id: string; name: string; category: string; createdAt?: string }>>("/archives/documents?limit=5")) ?? [];
+  const storage = await serverApi<{
+    usedBytes: number;
+    limitBytes: number;
+    usedMb: number;
+    limitMb: number;
+    percent: number;
+    count: number;
+    antivirus: { configured: boolean; engine: string };
+  }>("/uploads/usage");
+
+  const formatSize = (mb: number) => (mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`);
+  const storagePercent = storage?.percent ?? 0;
+
   const archiveSections: ArchiveSection[] = [
     {
       title: "Factures archivées",
       description: "Factures historiques et documents comptables",
       icon: FileText,
       href: "/dashboard/archives/invoices",
-      count: 147,
+      count: countFor("invoice"),
       color: "text-blue-500",
       bgColor: "from-blue-500/20 to-blue-500/5",
     },
@@ -44,7 +60,7 @@ export default async function ArchivesPage() {
       description: "Anciens clients et prospects inactifs",
       icon: Users,
       href: "/dashboard/archives/clients",
-      count: 89,
+      count: countFor("client"),
       color: "text-emerald-500",
       bgColor: "from-emerald-500/20 to-emerald-500/5",
     },
@@ -53,7 +69,7 @@ export default async function ArchivesPage() {
       description: "Produits discontinués ou hors catalogue",
       icon: Package,
       href: "/dashboard/archives/products",
-      count: 234,
+      count: countFor("product"),
       color: "text-purple-500",
       bgColor: "from-purple-500/20 to-purple-500/5",
     },
@@ -62,23 +78,31 @@ export default async function ArchivesPage() {
       description: "Contrats, rapports et fichiers historiques",
       icon: FolderArchive,
       href: "/dashboard/archives/documents",
-      count: 512,
+      count: stats?.totalDocuments ?? 0,
       color: "text-amber-500",
       bgColor: "from-amber-500/20 to-amber-500/5",
     },
   ];
 
   const totalArchived = archiveSections.reduce((sum, section) => sum + section.count, 0);
-  const recentArchives = [
-    { type: "Facture", name: "INV-2024-0042", date: "2024-01-15", status: "Archivée" },
-    { type: "Client", name: "Tech Solutions SARL", date: "2024-01-14", status: "Archivé" },
-    { type: "Produit", name: "Smartphone X100", date: "2024-01-12", status: "Archivé" },
-    { type: "Document", name: "Contrat_2023_089.pdf", date: "2024-01-10", status: "Archivé" },
-  ];
+  const categoryLabels: Record<string, string> = {
+    invoice: "Facture",
+    client: "Client",
+    product: "Produit",
+    hr: "RH",
+    contract: "Contrat",
+    other: "Document",
+  };
+  const recentArchives = documents.map((document) => ({
+    type: categoryLabels[document.category] ?? "Document",
+    name: document.name,
+    date: (document.createdAt ?? "").slice(0, 10),
+    status: "Archivé",
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background)] via-[var(--background)] to-[var(--accent)]/5">
-      <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
         
         {/* HEADER SECTION */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -107,7 +131,7 @@ export default async function ArchivesPage() {
           </div>
           
           {/* Stats */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <div className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-center">
               <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase">Total archivé</p>
               <p className="text-xl font-black text-amber-500">{totalArchived}</p>
@@ -115,8 +139,15 @@ export default async function ArchivesPage() {
             </div>
             <div className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-center">
               <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase">Espace utilisé</p>
-              <p className="text-xl font-black text-emerald-500">2.4 GB</p>
-              <p className="text-[8px] text-[var(--foreground-muted)]">Sur 10 GB</p>
+              <p className="text-xl font-black text-emerald-500">{formatSize(storage?.usedMb ?? 0)}</p>
+              <p className="text-[8px] text-[var(--foreground-muted)]">Sur {formatSize(storage?.limitMb ?? 0)}</p>
+            </div>
+            <div className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-center">
+              <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase">Fichiers</p>
+              <p className="text-xl font-black text-blue-500">{storage?.count ?? 0}</p>
+              <p className="text-[8px] text-[var(--foreground-muted)]">
+                {storage?.antivirus.configured ? "ClamAV actif" : "Scan intégré"}
+              </p>
             </div>
           </div>
         </div>
@@ -136,7 +167,7 @@ export default async function ArchivesPage() {
               <HardDrive size={16} className="text-[var(--foreground-muted)]" />
               <span className="text-[8px] font-mono text-[var(--foreground-muted)]">STORAGE</span>
             </div>
-            <p className="text-lg font-black">24%</p>
+            <p className="text-lg font-black">{storagePercent}%</p>
             <p className="text-[10px] text-[var(--foreground-muted)]">Espace utilisé</p>
           </div>
           <div className="p-4 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl">
@@ -211,7 +242,7 @@ export default async function ArchivesPage() {
           </div>
           
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead className="bg-[var(--accent)]/5 border-b border-[var(--border)]">
                 <tr>
                   <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Type</th>

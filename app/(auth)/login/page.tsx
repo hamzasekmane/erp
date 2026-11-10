@@ -102,18 +102,18 @@ export default function LoginPage() {
       </div>
 
       {/* --- RIGHT SIDE: THE FORM (MIDNIGHT VERSION) --- */}
-      <div className="flex-1 flex items-center justify-center p-8 lg:p-24 relative bg-[#01050d]">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-24 relative bg-[#01050d]">
         
         {/* Subtile Glow derrière le formulaire */}
         <div className="absolute w-[500px] h-[500px] bg-blue-600/5 blur-[120px] rounded-full pointer-events-none" />
 
         <div className="max-w-[420px] w-full relative z-10">
           
-          <div className="mb-12 text-center lg:text-left">
+          <div className="mb-8 sm:mb-12 text-center lg:text-left">
             <motion.h1 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-4xl lg:text-5xl font-black text-white mb-4 tracking-tighter uppercase italic"
+              className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-4 tracking-tighter uppercase italic"
             >
               Bon retour !
             </motion.h1>
@@ -125,7 +125,7 @@ export default function LoginPage() {
           {/* Form Container */}
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-rose-600/20 rounded-[2.5rem] blur-xl opacity-50 group-hover:opacity-100 transition duration-1000"></div>
-            <div className="relative bg-[#0a0f1d]/80 border border-white/5 p-10 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl">
+            <div className="relative bg-[#0a0f1d]/80 border border-white/5 p-5 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] backdrop-blur-2xl shadow-2xl">
               <LoginForm />
             </div>
           </div>

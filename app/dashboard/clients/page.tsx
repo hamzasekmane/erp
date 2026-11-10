@@ -117,7 +117,7 @@ function ClientsTable({
                 <Building2 size={24} className="text-[var(--accent)]" />
               </div>
               <div>
-                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black italic uppercase tracking-tighter">
                   Clients
                   <span className="text-[var(--accent)] ml-2">.</span>
                 </h1>
@@ -199,7 +199,7 @@ function ClientsTable({
         <div className="relative bg-gradient-to-br from-[var(--gradient-from)] to-[var(--gradient-to)] backdrop-blur-md border border-[var(--border)] rounded-[2rem] overflow-hidden shadow-2xl">
           
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="bg-[var(--card-bg)] border-b border-[var(--border)]">
                   <th className="px-8 py-5 text-left">

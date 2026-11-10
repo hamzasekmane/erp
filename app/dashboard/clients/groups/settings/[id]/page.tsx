@@ -60,7 +60,7 @@ export default async function ClientGroupSettingsPage({ params }: Props) {
 
       {/* ===== TITRE ===== */}
       <div className="relative">
-        <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic">
+        <h1 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter italic">
           Paramètres
           <span className="text-amber-400 ml-2">•</span>
         </h1>
@@ -172,7 +172,7 @@ export default async function ClientGroupSettingsPage({ params }: Props) {
             </Link>
             
             {/* ✅ Bouton de suppression (Client Component) */}
-            <DeleteGroupButton groupId={id} groupName={group.name} />
+            <DeleteGroupButton groupId={id} groupName={group.name} token={token} />
           </div>
         </div>
       </div>

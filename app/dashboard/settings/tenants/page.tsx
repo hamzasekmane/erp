@@ -53,7 +53,7 @@ export default async function TenantsPage() {
   const inactivePercentage = totalTenants > 0 ? (inactiveTenants / totalTenants) * 100 : 0;
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* HEADER SECTION with Back Button */}
       <div className="flex items-center gap-3 mb-4">

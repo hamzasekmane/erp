@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import RegisterForm from "@/app/components/auth/RegisterForm";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -86,17 +87,19 @@ export default function RegisterPage() {
       </div>
 
       {/* --- RIGHT SIDE: FORM --- */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 relative bg-[#01050d]">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-12 relative bg-[#01050d]">
         <div className="max-w-[540px] w-full relative z-10">
           <div className="mb-10 text-center lg:text-left">
-            <h1 className="text-4xl font-black text-white mb-3 tracking-tighter uppercase italic">Prêt à démarrer ?</h1>
+            <h1 className="text-3xl sm:text-4xl font-black text-white mb-3 tracking-tighter uppercase italic">Prêt à démarrer ?</h1>
             <p className="text-zinc-500 text-sm font-medium tracking-wide">Inscrivez votre entreprise et accédez à votre infrastructure.</p>
           </div>
 
-          <div className="bg-[#0a0f1d]/60 border border-white/5 p-8 lg:p-10 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative group">
+          <div className="bg-[#0a0f1d]/60 border border-white/5 p-5 sm:p-8 lg:p-10 rounded-[2rem] sm:rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative group">
              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/10 to-rose-600/10 rounded-[2.5rem] blur-xl opacity-50 group-hover:opacity-100 transition duration-1000" />
              <div className="relative">
-                <RegisterForm />
+                <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-white/5" />}>
+                  <RegisterForm />
+                </Suspense>
              </div>
           </div>
 

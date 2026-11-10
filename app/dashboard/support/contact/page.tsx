@@ -97,7 +97,7 @@ export default function ContactSupportPage() {
               <h3 className="text-base font-black">Envoyez-nous un message</h3>
             </div>
             <form className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium mb-1">Nom</label>
                   <input
@@ -172,7 +172,7 @@ export default function ContactSupportPage() {
             {/* Social Media */}
             <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl p-6">
               <h3 className="text-base font-black mb-4">Suivez-nous</h3>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 <Link href="#" className="p-3 bg-[var(--background)] rounded-xl hover:bg-[var(--accent)]/10 transition-colors">
                   <Twitter size={20} className="text-[var(--accent)]" />
                 </Link>

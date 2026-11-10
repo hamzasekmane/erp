@@ -1,9 +1,10 @@
+import { apiBaseUrl } from "@/app/lib/apiBase";
 /**
  * notification.service.ts
  * Service de gestion des notifications pour Velora ERP
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = apiBaseUrl();
 
 // --- INTERFACES ---
 

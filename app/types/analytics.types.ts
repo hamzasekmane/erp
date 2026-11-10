@@ -5,6 +5,8 @@ export interface AnalyticsCard {
   change: number;
   trend: 'up' | 'down';
   icon: string;
+  /** Optional Lucide icon name used by KPICard (falls back to `icon`). */
+  iconName?: string;
   color: string;
   href: string;
 }

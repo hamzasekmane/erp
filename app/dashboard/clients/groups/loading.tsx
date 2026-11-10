@@ -31,7 +31,7 @@ export default function NewClientGroupLoading() {
           {/* Section 2 */}
           <div className="space-y-6">
             <div className="h-6 w-40 bg-white/5 rounded border border-white/10" />
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[...Array(8)].map((_, i) => (
                 <div key={i} className="h-16 bg-white/5 rounded-xl border border-white/10" />
               ))}

@@ -111,7 +111,7 @@ export default function SmsSettingsPage() {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-8 animate-in fade-in duration-700">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8 animate-in fade-in duration-700">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -130,7 +130,7 @@ export default function SmsSettingsPage() {
           </div>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={handleTest}
             disabled={loading}
@@ -433,7 +433,7 @@ export default function SmsSettingsPage() {
             
             <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[640px]">
                   <thead>
                     <tr className="bg-zinc-50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800">
                       <th className="px-5 py-3 text-left text-[10px] font-black text-zinc-500 uppercase">Destinataire</th>

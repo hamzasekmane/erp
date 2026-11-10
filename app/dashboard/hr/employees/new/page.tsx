@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { createEmployeeAction } from "@/app/actions/hrActions";
 
 interface EmployeeFormData {
   // Informations personnelles
@@ -145,12 +146,29 @@ export default function NewEmployeePage() {
     
     setLoading(true);
     try {
-      // TODO: Appel API pour créer l'employé
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const result = await createEmployeeAction({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        position: formData.position,
+        departmentName: formData.department,
+        contractType: formData.contractType,
+        hireDate: formData.hireDate,
+        salary: Number(formData.salary) || 0,
+      });
+
+      if (!result.success) {
+        toast.error(result.message || "Création impossible");
+        return;
+      }
+
       toast.success("Employé créé avec succès !");
       router.push("/dashboard/hr/employees");
+      router.refresh();
     } catch (error) {
-      toast.error("Erreur lors de la création");
+      toast.error(error instanceof Error ? error.message : "Erreur lors de la création");
     } finally {
       setLoading(false);
     }
@@ -169,7 +187,7 @@ export default function NewEmployeePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900">
-      <div className="p-6 md:p-8 space-y-8">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 lg:space-y-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-4">
@@ -196,7 +214,7 @@ export default function NewEmployeePage() {
             </div>
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <Link
               href="/dashboard/hr/employees"
               className="flex items-center gap-2 px-5 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"

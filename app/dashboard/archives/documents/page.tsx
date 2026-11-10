@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { serverApi } from "@/app/lib/serverApi";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -45,39 +46,56 @@ const getFileIcon = (type: string) => {
   }
 };
 
+
+const CATEGORY_LABELS: Record<string, string> = {
+  invoice: "Factures",
+  client: "Clients",
+  product: "Produits",
+  hr: "RH",
+  contract: "Contrats",
+  other: "Autres",
+};
+
+interface ArchivedDocumentRow {
+  id: string;
+  name: string;
+  category: string;
+  mime?: string | null;
+  size?: number;
+  createdAt?: string;
+}
+
+function formatSize(bytes: number): string {
+  if (!bytes) return "0 KB";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function fileType(mime?: string | null): ArchivedDocument["type"] {
+  if (!mime) return "other";
+  if (mime.includes("pdf")) return "pdf";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.includes("zip") || mime.includes("compressed")) return "archive";
+  return "other";
+}
+
+async function loadDocuments(): Promise<ArchivedDocument[]> {
+  const rows = await serverApi<ArchivedDocumentRow[]>("/archives/documents?limit=100");
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: fileType(row.mime),
+    size: formatSize(Number(row.size ?? 0)),
+    category: CATEGORY_LABELS[row.category] ?? "Autres",
+    archivedDate: (row.createdAt ?? "").slice(0, 10),
+    expiryDate: "",
+    status: "archived" as const,
+  }));
+}
+
 export default async function ArchivedDocumentsPage() {
-  const archivedDocuments: ArchivedDocument[] = [
-    {
-      id: "1",
-      name: "Contrat_2023_Client_A.pdf",
-      type: "pdf",
-      size: "2.4 MB",
-      category: "Contrats",
-      archivedDate: "2024-01-15",
-      expiryDate: "2025-01-15",
-      status: "archived",
-    },
-    {
-      id: "2",
-      name: "Facture_2023_12_31.pdf",
-      type: "pdf",
-      size: "856 KB",
-      category: "Factures",
-      archivedDate: "2024-01-20",
-      expiryDate: "2025-01-20",
-      status: "archived",
-    },
-    {
-      id: "3",
-      name: "Rapport_Annuel_2023.zip",
-      type: "archive",
-      size: "15.2 MB",
-      category: "Rapports",
-      archivedDate: "2024-01-25",
-      expiryDate: "2025-01-25",
-      status: "pending_deletion",
-    },
-  ];
+  const archivedDocuments = await loadDocuments();
 
   const totalSize = archivedDocuments.reduce((total, doc) => {
     const sizeInMB = parseFloat(doc.size);
@@ -85,7 +103,7 @@ export default async function ArchivedDocumentsPage() {
   }, 0);
 
   return (
-    <div className="p-6 md:p-8 space-y-6 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 animate-in fade-in duration-500">
       
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -116,7 +134,7 @@ export default async function ArchivedDocumentsPage() {
           </div>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button className="px-4 py-2 text-sm bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500/20 transition-colors flex items-center gap-2">
             <Download size={14} />
             Exporter tout

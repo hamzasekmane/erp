@@ -165,7 +165,7 @@ export default function NewGatewayForm({ token, supportedGateways }: NewGatewayF
   }
 
   return (
-    <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl p-6 md:p-8">
+    <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 lg:p-8">
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Step 1: Choose Gateway */}
         <div>
