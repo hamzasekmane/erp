@@ -76,7 +76,14 @@ npm run openapi          # 78 chemins
 
 Parcours manuels validés : inscription → login → `me` → client → produit → facture (remise/TVA/livraison) → paiement partiel → refus de surpaiement → remboursement → dashboard/rapports → import CSV → RH/paie → support → archives → clés API → OpenAPI → upload/téléchargement de fichier → logo tenant → mot de passe oublié livré dans `.data/mail` → exécution de la maintenance.
 
-## 6. Suite proposée (phase 4)
+## 6. Durcissement production
+
+Voir [`04-production-deployment.md`](./04-production-deployment.md) : images Docker (API et frontend),
+`docker-compose.yml` racine (PostgreSQL + API + web), migrations transactionnelles verrouillées, refus de
+démarrage si la configuration de production est incomplète, sondes `live`/`ready`, limiteur de débit,
+en-têtes Helmet, CI GitHub Actions, sauvegardes et checklist de mise en ligne.
+
+## 7. Suite proposée (phase 4)
 
 1. Corriger les littéraux corrompus côté frontend et brancher les écrans restants sur l'API.
 2. Worker outbox (emails, webhooks) + SMTP.

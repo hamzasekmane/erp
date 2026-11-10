@@ -19,6 +19,7 @@ import {
   tenants,
   users,
 } from "./schema";
+import { isProd } from "../config/env";
 import { hashPassword } from "../shared/security/password";
 import { newId } from "../shared/ids";
 
@@ -250,14 +251,28 @@ async function seedDemo(demoPlanCode: string) {
 }
 
 async function main() {
+  if (isProd && process.env.SEED_ALLOW_PRODUCTION !== "true") {
+    console.error("Refusing to seed a production database. Set SEED_ALLOW_PRODUCTION=true to override.");
+    process.exit(1);
+  }
+  if (isProd && (!process.env.SEED_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD === "ChangeMe123!")) {
+    console.error("SEED_ADMIN_PASSWORD must be set to a non-default value when seeding production.");
+    process.exit(1);
+  }
+
   await initDb();
   await migrate();
   await ensureBaselinePlans();
   await seedPlatform();
-  await seedDemo(process.env.SEED_DEMO_PLAN ?? "professional");
+
+  const withDemo = process.env.SEED_DEMO ? process.env.SEED_DEMO !== "false" : !isProd;
+  if (withDemo) {
+    await seedDemo(process.env.SEED_DEMO_PLAN ?? "professional");
+  }
+
   console.log("seed complete");
-  console.log(`platform admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
-  console.log(`demo tenant:    ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
+  console.log(`platform admin: ${ADMIN_EMAIL} (password ${isProd ? "set from SEED_ADMIN_PASSWORD" : `= ${ADMIN_PASSWORD}`})`);
+  if (withDemo) console.log(`demo tenant:    ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
   await closeDb();
 }
 

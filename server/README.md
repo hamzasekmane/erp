@@ -95,6 +95,14 @@ src/
   test/                    application de test + suite e2e
 ```
 
+## Production
+
+- Image Docker (`Dockerfile`), orchestration (`docker-compose.yml`), exemple d'environnement (`.env.production.example`).
+- `NODE_ENV=production` impose `DATABASE_URL`, un `JWT_SECRET` non trivial et des origines CORS explicites ; l'API refuse de démarrer sinon.
+- Migrations transactionnelles avec verrou consultatif, `RUN_MIGRATIONS_ON_BOOT=false` possible en pipeline.
+- Sondes `/api/health/live` et `/api/health/ready`, arrêt gracieux (SIGTERM), limiter de débit, en-têtes Helmet, compression.
+- Runbook complet : [`../docs/04-production-deployment.md`](../docs/04-production-deployment.md).
+
 ## Sécurité
 
 - Mots de passe scrypt, politique 8 caractères minimum + lettre + chiffre (compromis de compatibilité avec les formulaires existants).

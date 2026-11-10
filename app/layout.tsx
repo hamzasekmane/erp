@@ -1,13 +1,7 @@
-import { Inter } from "next/font/google";
+import "@fontsource-variable/inter";
 import "./globals.css";
 import Providers from "./providers";
 import type { Metadata, Viewport } from "next";
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "Valora | Gestion d'entreprise intelligente",
@@ -36,7 +30,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" dir="ltr">
-      <body className={`${inter.className} ${inter.variable} antialiased bg-white`}>
+      <body className="antialiased bg-white">
         <Providers>{children}</Providers>
       </body>
     </html>

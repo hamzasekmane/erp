@@ -1,9 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { PLANS } from "../config/plans";
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const params = useSearchParams();
   const planId = params.get("plan") || "free";
   const billing = params.get("billing") || "mensuel";
@@ -26,5 +27,13 @@ export default function CheckoutPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-[#0b0f19]" />}>
+      <CheckoutContent />
+    </Suspense>
   );
 }

@@ -1,53 +1,74 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { closeDb, execSql, initDb } from "./client";
+import { useEmbeddedDb } from "../config/env";
+import { closeDb, getTxClient, initDb, type TxClient } from "./client";
 
 const MIGRATIONS_DIR = join(process.cwd(), "drizzle");
 
 /**
- * Minimal forward-only migrator. Files are applied in lexical order and recorded
- * in `_migrations` (created on first run).
+ * Forward-only migrator. Each file runs inside a transaction on a single pinned
+ * connection, and the file is claimed with `INSERT ... ON CONFLICT DO NOTHING`
+ * so two instances booting at once cannot apply the same migration twice.
+ * On PostgreSQL a transaction-scoped advisory lock serialises the whole run.
  */
 export async function migrate(): Promise<void> {
   await initDb();
-  await execSql(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      name text PRIMARY KEY,
-      applied_at timestamptz NOT NULL DEFAULT now()
-    );
-  `);
+  const tx = await getTxClient();
+  try {
+    await tx.exec(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        name text PRIMARY KEY,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      );
+    `);
 
-  const applied = new Set<string>();
-  const rows = (await execSqlRows("SELECT name FROM _migrations")) as Array<{ name: string }>;
-  for (const row of rows) applied.add(row.name);
+    const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(".sql")).sort();
+    if (files.length === 0) return;
 
-  const files = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith(".sql")).sort();
-  for (const file of files) {
-    if (applied.has(file)) continue;
-    const sql = await readFile(join(MIGRATIONS_DIR, file), "utf8");
-    const statements = sql
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    for (const statement of statements) {
-      await execSql(statement);
+    for (const file of files) {
+      await applyFile(tx, file);
     }
-    await execSql(`INSERT INTO _migrations (name) VALUES ('${file.replace(/'/g, "''")}')`);
-    console.log(`applied ${file} (${statements.length} statements)`);
+  } finally {
+    await tx.release();
   }
 }
 
-async function execSqlRows(sql: string): Promise<unknown[]> {
-  const { getDb } = await import("./client");
-  const database = getDb();
-  // drizzle's execute works for both drivers
-  const result = (await database.execute(sql as never)) as unknown;
-  if (Array.isArray(result)) return result as unknown[];
-  if (result && typeof result === "object" && "rows" in (result as Record<string, unknown>)) {
-    return (result as { rows: unknown[] }).rows;
+async function applyFile(tx: TxClient, file: string) {
+  const applied = await tx.query<{ name: string }>(`SELECT name FROM _migrations WHERE name = '${escapeLiteral(file)}'`);
+  if (applied.length > 0) return;
+
+  const sql = await readFile(join(MIGRATIONS_DIR, file), "utf8");
+  const statements = sql
+    .split("--> statement-breakpoint")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+
+  await tx.exec("BEGIN");
+  try {
+    if (!useEmbeddedDb) {
+      // Serialise concurrent deployers for the duration of this transaction.
+      await tx.exec("SELECT pg_advisory_xact_lock(hashtext('erp_schema_migrations'))");
+    }
+    const claimed = await tx.query<{ name: string }>(
+      `INSERT INTO _migrations (name) VALUES ('${escapeLiteral(file)}') ON CONFLICT (name) DO NOTHING RETURNING name`,
+    );
+    if (claimed.length === 0) {
+      await tx.exec("ROLLBACK");
+      return;
+    }
+    for (const statement of statements) {
+      await tx.exec(statement);
+    }
+    await tx.exec("COMMIT");
+    console.log(`applied ${file} (${statements.length} statements)`);
+  } catch (error) {
+    await tx.exec("ROLLBACK").catch(() => undefined);
+    throw error;
   }
-  return [];
+}
+
+function escapeLiteral(value: string): string {
+  return value.replace(/'/g, "''");
 }
 
 if (require.main === module) {

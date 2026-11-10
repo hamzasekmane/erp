@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import RegisterForm from "@/app/components/auth/RegisterForm";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -96,7 +97,9 @@ export default function RegisterPage() {
           <div className="bg-[#0a0f1d]/60 border border-white/5 p-8 lg:p-10 rounded-[2.5rem] backdrop-blur-2xl shadow-2xl relative group">
              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/10 to-rose-600/10 rounded-[2.5rem] blur-xl opacity-50 group-hover:opacity-100 transition duration-1000" />
              <div className="relative">
-                <RegisterForm />
+                <Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-white/5" />}>
+                  <RegisterForm />
+                </Suspense>
              </div>
           </div>
 

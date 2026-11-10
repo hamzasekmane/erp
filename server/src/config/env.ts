@@ -11,6 +11,8 @@ const schema = z.object({
   APP_URL: z.string().default("http://localhost:3000"),
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
   DATABASE_URL: z.string().optional().default(""),
+  DATABASE_SSL: bool,
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   PGLITE_DATA_DIR: z.string().default(".data/pglite"),
   JWT_SECRET: z
     .string()
@@ -20,6 +22,15 @@ const schema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(30),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   TRUST_PROXY: bool,
+  // Production hardening
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
+  ENABLE_API_DOCS: bool,
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
+  RATE_LIMIT_DISABLED: bool,
+  RUN_MIGRATIONS_ON_BOOT: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .transform((value) => value === undefined || value === "true" || value === "1"),
   // Mail: without SMTP_URL, messages are written to MAIL_OUTBOX_DIR (dev only).
   SMTP_URL: z.string().optional().default(""),
   MAIL_FROM: z.string().default("ERP <no-reply@erp.local>"),
@@ -48,6 +59,22 @@ export const env = parsed.data;
 export const isProd = env.NODE_ENV === "production";
 export const useEmbeddedDb = !env.DATABASE_URL;
 
-if (isProd && env.JWT_SECRET.startsWith("dev-only")) {
-  throw new Error("JWT_SECRET must be configured in production");
+const productionProblems: string[] = [];
+if (isProd) {
+  if (env.JWT_SECRET.startsWith("dev-only")) productionProblems.push("JWT_SECRET must be set to a strong random value");
+  if (!env.DATABASE_URL) productionProblems.push("DATABASE_URL is required (the embedded PGlite database is for development only)");
+  if (env.CORS_ORIGINS.trim() === "" || env.CORS_ORIGINS.includes("*")) productionProblems.push("CORS_ORIGINS must list explicit origins");
+  if (env.SMTP_URL === "" && env.MAIL_OUTBOX_DIR.startsWith(".data")) {
+    // Not fatal: the outbox keeps messages until SMTP is configured.
+    console.warn("[config] SMTP_URL is empty: e-mails will be queued to MAIL_OUTBOX_DIR instead of being delivered.");
+  }
 }
+if (productionProblems.length > 0) {
+  throw new Error(`Invalid production configuration:\n- ${productionProblems.join("\n- ")}`);
+}
+
+if (env.RUN_MIGRATIONS_ON_BOOT === false && isProd) {
+  console.info("[config] RUN_MIGRATIONS_ON_BOOT=false: run `npm run db:migrate` during deployment.");
+}
+
+export const apiDocsEnabled = env.ENABLE_API_DOCS || !isProd;

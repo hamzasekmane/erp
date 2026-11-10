@@ -9,10 +9,19 @@ import * as schema from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
 
+export type TxClient = {
+  /** Executes one or more statements on a single pinned connection. */
+  exec: (sql: string) => Promise<void>;
+  /** Runs a query on the same connection and returns the rows. */
+  query: <T = Record<string, unknown>>(sql: string) => Promise<T[]>;
+  release: () => Promise<void>;
+};
+
 type Holder = {
   db: Database;
   exec: (sql: string) => Promise<void>;
   close: () => Promise<void>;
+  connectTx: () => Promise<TxClient>;
 };
 
 let holder: Holder | null = null;
@@ -37,16 +46,29 @@ export async function initDb(): Promise<void> {
       close: async () => {
         await client.close();
       },
+      connectTx: async () => ({
+        exec: async (sql: string) => {
+          await client.exec(sql);
+        },
+        query: async <T>(sql: string) => {
+          const result = await client.query<T>(sql);
+          return result.rows;
+        },
+        release: async () => {},
+      }),
     };
     return;
   }
 
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
-    max: 10,
-    statement_timeout: 5000,
+    max: env.DATABASE_POOL_MAX,
+    ssl: env.DATABASE_SSL ? { rejectUnauthorized: true } : undefined,
+    statement_timeout: 15_000,
     idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
   });
+  pool.on("error", (error) => console.error("[db] idle client error", error.message));
   const db = drizzleNodePg(pool, { schema });
   holder = {
     db,
@@ -55,6 +77,21 @@ export async function initDb(): Promise<void> {
     },
     close: async () => {
       await pool.end();
+    },
+    connectTx: async () => {
+      const client = await pool.connect();
+      return {
+        exec: async (sql: string) => {
+          await client.query(sql);
+        },
+        query: async <T>(sql: string) => {
+          const result = await client.query(sql);
+          return result.rows as T[];
+        },
+        release: async () => {
+          client.release();
+        },
+      };
     },
   };
 }
@@ -67,6 +104,12 @@ export function getDb(): Database {
 export async function execSql(sql: string): Promise<void> {
   if (!holder) throw new Error("Database not initialised. Call initDb() first.");
   await holder.exec(sql);
+}
+
+/** Pinned connection used by the migrator (transactions need a single session). */
+export async function getTxClient(): Promise<TxClient> {
+  if (!holder) throw new Error("Database not initialised. Call initDb() first.");
+  return holder.connectTx();
 }
 
 export async function closeDb(): Promise<void> {
