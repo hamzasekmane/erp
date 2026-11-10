@@ -1,7 +1,8 @@
 node_modules
 dist
 .data
-uploads
+/uploads
+!src/modules/uploads/**
 coverage
 *.log
 .env
