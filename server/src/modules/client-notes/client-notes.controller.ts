@@ -48,6 +48,12 @@ export class ClientNotesController {
     return ok(await this.notes.byClient(ctx(auth, req), clientId));
   }
 
+  @Get(":id")
+  @RequirePermissions(PERMISSIONS.clientsRead)
+  async byId(@CurrentAuth() auth: AuthContext, @Req() req: Request, @Param("id") id: string) {
+    return ok(await this.notes.byId(ctx(auth, req), id));
+  }
+
   @Post()
   @RequirePermissions(PERMISSIONS.clientsWrite)
   async create(@CurrentAuth() auth: AuthContext, @Req() req: Request, @Body(new ZodValidationPipe(createNoteSchema)) body: z.infer<typeof createNoteSchema>) {

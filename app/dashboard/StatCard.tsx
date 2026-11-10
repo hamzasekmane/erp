@@ -7,7 +7,7 @@ interface StatCardProps {
   value: string | number;
   icon: React.ReactNode;
   // Updated keys to match your new custom OKLCH colors
-  color: "lime" | "mint" | "gold" | "royal" | "cyan" | "rose";
+  color: "lime" | "mint" | "gold" | "royal" | "cyan" | "rose" | "indigo";
   trendValue?: string | number;
   isCurrency?: boolean;
   delay?: number;
@@ -15,6 +15,9 @@ interface StatCardProps {
 
 // Fixed color mapping using your specific OKLCH values
 const colorVariants = {
+  // Indigo accent (used by inventory/product stats)
+  indigo: "bg-[oklch(58.5%_0.233_277.117)] shadow-[oklch(58.5%_0.233_277.117)/0.3] text-white",
+
   // oklch(76.8% 0.233 130.85) - High Vibrancy Lime/Green
   lime: "bg-[oklch(76.8%_0.233_130.85)] shadow-[oklch(76.8%_0.233_130.85)/0.3] text-black",
   
@@ -33,6 +36,7 @@ const colorVariants = {
 };
 
 const dotColors = {
+  indigo: "bg-[oklch(58.5%_0.233_277.117)]",
   lime: "bg-[oklch(76.8%_0.233_130.85)]",
   mint: "bg-[oklch(85.5%_0.138_181.071)]",
   gold: "bg-[oklch(89.7%_0.196_126.665)]",

@@ -18,7 +18,7 @@ const colorClasses = {
 };
 
 export function KPICard({ card }: KPICardProps) {
-  const Icon = getIcon(card.iconName);
+  const Icon = getIcon(card.iconName ?? card.icon);
 
   return (
     <Link

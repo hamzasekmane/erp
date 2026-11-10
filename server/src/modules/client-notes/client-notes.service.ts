@@ -60,6 +60,10 @@ export class ClientNotesService {
     return this.get(ctx, id);
   }
 
+  async byId(ctx: Ctx, id: string) {
+    return this.get(ctx, id);
+  }
+
   async update(ctx: Ctx, id: string, input: { content?: string; type?: string; title?: string; isPinned?: boolean }) {
     const db = getDb();
     const existing = await this.require(ctx, id);

@@ -229,9 +229,9 @@ L'image Docker du frontend est fournie (`Dockerfile` à la racine, sortie `stand
 
 ## 12. Dette frontend
 
-- 69 erreurs TypeScript historiques subsistent côté Next.js : le build reste vert
-  (`typescript.ignoreBuildErrors`, `tsc --noEmit` en CI **non bloquant**), mais le nettoyage est un
-  chantier à part entière (typages des actions, réponses API, props de composants).
+- **TypeScript : 0 erreur.** `next build` est bloquant en cas d'erreur de type et `tsc --noEmit` est
+  exécuté en CI. Les 69 erreurs historiques ont été corrigées (typages des actions, réponses API,
+  props de composants, export analytique, notes client).
 - Certains écrans (RH, support, archives, analytics) tournent encore sur des données statiques et ne
   consomment pas les endpoints correspondants.
 - Les littéraux d'URL corrompus relevés dans l'audit initial ont été vérifiés : les services actuels

@@ -89,21 +89,24 @@ export const analyticsApi = {
     return response.json();
   },
 
-  async exportReport(token: string, reportType: string, format: string = 'excel') {
-    const response = await fetch(`${API_BASE_URL}/reports/export`, {
-      method: 'POST',
+  async exportReport(token: string, reportType: string, format: string = 'csv') {
+    // Backend contract: GET /reports/export?type=<report>&format=csv -> text/csv
+    const queryString = new URLSearchParams({ type: reportType, format }).toString();
+    const response = await fetch(`${API_BASE_URL}/reports/export?${queryString}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ reportType, format }),
     });
-    
+
     if (!response.ok) {
       throw new Error(`Export failed with status ${response.status}`);
     }
-    
-    return response.json();
+
+    return {
+      success: true as const,
+      csv: await response.text(),
+      filename: `export-${reportType}-${new Date().toISOString().slice(0, 10)}.csv`,
+    };
   },
   async fetchTrafficSources(token: string, params?: { startDate?: string; endDate?: string }) {
   const queryString = params ? new URLSearchParams(params).toString() : '';

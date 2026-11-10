@@ -58,9 +58,8 @@ export default function PaymentModal({ invoice, onClose }: PaymentModalProps) {
 
       const paymentData = {
         amount,
-        paymentMethod: formData.get("paymentMethod"),
-        paymentDate: formData.get("paymentDate"),
-        notes: formData.get("notes"),
+        method: String(formData.get("paymentMethod") || "CASH"),
+        notes: (formData.get("notes") as string) || undefined,
       };
       
       // ✅ لا ترسل token - الـ action يجلبه تلقائياً

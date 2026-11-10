@@ -172,7 +172,7 @@ export default async function ClientGroupSettingsPage({ params }: Props) {
             </Link>
             
             {/* ✅ Bouton de suppression (Client Component) */}
-            <DeleteGroupButton groupId={id} groupName={group.name} />
+            <DeleteGroupButton groupId={id} groupName={group.name} token={token} />
           </div>
         </div>
       </div>

@@ -77,7 +77,7 @@ function validatePhoneNumber(phone: string | null | undefined): string | undefin
 }
 
 type ActionResponse = {
-  message: string;
+  message?: string;
   success?: boolean;
   error?: string;
   data?: any;

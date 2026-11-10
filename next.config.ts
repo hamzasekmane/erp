@@ -4,10 +4,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   compress: true,
-  // The legacy codebase still has type errors (see docs/04 §9); keep the build
-  // green and track the cleanup separately.
+  // Type errors are blocking: `npm run build` fails on any regression.
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   images: {
