@@ -17,13 +17,26 @@ import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
 import { hashPassword, passwordIssues, verifyPassword } from "../../shared/security/password";
 import { permissionsFor } from "../../shared/security/permissions";
-import { hashToken, newRefreshToken, refreshExpiryDate, signAccessToken } from "../../shared/security/tokens";
+import {
+  hashToken,
+  newRefreshToken,
+  refreshExpiryDate,
+  signAccessToken,
+  signMfaChallenge,
+  verifyMfaChallenge,
+} from "../../shared/security/tokens";
+import { decryptSecret, encryptSecret, secretsConfigured } from "../../shared/security/secrets";
+import { generateTotpSecret, otpauthUrl, verifyTotp } from "../../shared/security/totp";
+import { env } from "../../config/env";
 import * as throttle from "../../shared/security/throttle";
 import { serializeTenant, serializeUser } from "../../shared/serializers";
 import type {
   ForgotPasswordInput,
   LoginInput,
   LogoutInput,
+  MfaCodeInput,
+  MfaDisableInput,
+  MfaVerifyInput,
   RefreshInput,
   RegisterInput,
   ResetPasswordInput,
@@ -182,6 +195,24 @@ export class AuthService {
       throw AppError.forbidden("Espace de travail indisponible", "TENANT_SUSPENDED");
     }
 
+    if (user.mfaEnabled) {
+      // Password accepted but no session yet: the client must prove possession
+      // of the TOTP device within 5 minutes.
+      await audit({
+        tenantId: tenant.id,
+        actorId: user.id,
+        action: "auth.mfa_challenge",
+        entity: "user",
+        entityId: user.id,
+        ...meta,
+      });
+      return {
+        mfaRequired: true as const,
+        challengeToken: await signMfaChallenge(user.id),
+        expiresIn: 300,
+      };
+    }
+
     await db.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, user.id));
     throttle.resetKey(throttleKey);
 
@@ -264,6 +295,7 @@ export class AuthService {
       user: serializeUser(user),
       tenant: serializeTenant(tenant, settings ?? null),
       permissions: permissionsFor(user.role),
+      mfa: this.mfaStatusFor(user),
     };
   }
 
@@ -356,6 +388,202 @@ export class AuthService {
     return `${base}-${Date.now().toString(36)}`;
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Multi-factor authentication (TOTP, RFC 6238)                        */
+  /* ------------------------------------------------------------------ */
+
+  private requireMfaStorage() {
+    if (!secretsConfigured()) {
+      throw new AppError(
+        "MFA_UNAVAILABLE",
+        "Le chiffrement des secrets n'est pas configuré (SECRETS_ENCRYPTION_KEY).",
+        503,
+      );
+    }
+  }
+
+  private mfaStatusFor(user: { role: string; mfaEnabled: boolean; mfaSecret: string | null }) {
+    return {
+      enabled: user.mfaEnabled,
+      pending: !user.mfaEnabled && Boolean(user.mfaSecret),
+      required: env.MFA_REQUIRE_SUPERADMIN && user.role === "superadmin",
+      issuer: env.MFA_ISSUER,
+      storageReady: secretsConfigured(),
+    };
+  }
+
+  async mfaStatus(auth: { userId: string }) {
+    const [user] = await getDb().select().from(users).where(eq(users.id, auth.userId)).limit(1);
+    if (!user) throw AppError.unauthorized("Utilisateur introuvable");
+    return this.mfaStatusFor(user);
+  }
+
+  /** Generates (or rotates) a pending TOTP secret; MFA stays disabled until confirmed. */
+  async mfaSetup(auth: { userId: string; tenantId: string }, meta: Meta) {
+    this.requireMfaStorage();
+    const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.id, auth.userId)).limit(1);
+    if (!user) throw AppError.unauthorized("Utilisateur introuvable");
+    // Rotating a secret must not silently downgrade an already protected account:
+    // disabling requires password + current code first.
+    if (user.mfaEnabled) {
+      throw new AppError("MFA_ALREADY_ENABLED", "Désactivez d'abord la double authentification.", 409);
+    }
+
+    const secret = generateTotpSecret();
+    await db
+      .update(users)
+      .set({ mfaSecret: encryptSecret(secret), mfaEnabled: false, mfaEnabledAt: null, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+
+    await audit({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      action: "auth.mfa_setup_started",
+      entity: "user",
+      entityId: user.id,
+      ...meta,
+    });
+
+    return {
+      secret,
+      otpauthUrl: otpauthUrl({ secret, account: user.email, issuer: env.MFA_ISSUER }),
+      issuer: env.MFA_ISSUER,
+      account: user.email,
+      digits: 6,
+      period: 30,
+    };
+  }
+
+  /** Confirms the pending secret with a first valid code. */
+  async mfaEnable(auth: { userId: string; tenantId: string }, input: MfaCodeInput, meta: Meta) {
+    this.requireMfaStorage();
+    const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.id, auth.userId)).limit(1);
+    if (!user) throw AppError.unauthorized("Utilisateur introuvable");
+    if (!user.mfaSecret) throw new AppError("MFA_NOT_STARTED", "Lancez d'abord la configuration MFA.", 400);
+    if (user.mfaEnabled) throw new AppError("MFA_ALREADY_ENABLED", "La double authentification est déjà active.", 409);
+
+    if (!verifyTotp(decryptSecret(user.mfaSecret), input.code)) {
+      await audit({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        action: "auth.mfa_enable_failed",
+        entity: "user",
+        entityId: user.id,
+        ...meta,
+      });
+      throw new AppError("INVALID_MFA_CODE", "Code invalide ou expiré.", 400);
+    }
+
+    await db
+      .update(users)
+      .set({ mfaEnabled: true, mfaEnabledAt: new Date(), mfaLastUsedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    await audit({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      action: "auth.mfa_enabled",
+      entity: "user",
+      entityId: user.id,
+      ...meta,
+    });
+    return { enabled: true };
+  }
+
+  /** Disabling requires both the password and a valid code. */
+  async mfaDisable(auth: { userId: string; tenantId: string }, input: MfaDisableInput, meta: Meta) {
+    const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.id, auth.userId)).limit(1);
+    if (!user) throw AppError.unauthorized("Utilisateur introuvable");
+    if (!verifyPassword(input.password, user.passwordHash)) {
+      throw AppError.unauthorized("Mot de passe incorrect");
+    }
+    if (!user.mfaEnabled || !user.mfaSecret) {
+      throw new AppError("MFA_NOT_ENABLED", "La double authentification n'est pas active.", 400);
+    }
+    if (!verifyTotp(decryptSecret(user.mfaSecret), input.code)) {
+      throw new AppError("INVALID_MFA_CODE", "Code invalide ou expiré.", 400);
+    }
+    if (env.MFA_REQUIRE_SUPERADMIN && user.role === "superadmin") {
+      throw new AppError(
+        "MFA_REQUIRED",
+        "La double authentification est obligatoire pour les super-administrateurs.",
+        403,
+      );
+    }
+
+    await db
+      .update(users)
+      .set({ mfaSecret: null, mfaEnabled: false, mfaEnabledAt: null, updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    await audit({
+      tenantId: user.tenantId,
+      actorId: user.id,
+      action: "auth.mfa_disabled",
+      entity: "user",
+      entityId: user.id,
+      ...meta,
+    });
+    return { enabled: false };
+  }
+
+  /** Second step of the login flow: exchanges the challenge for real tokens. */
+  async verifyMfa(input: MfaVerifyInput, meta: Meta) {
+    let subject: string;
+    try {
+      subject = (await verifyMfaChallenge(input.challengeToken)).sub;
+    } catch {
+      throw new AppError("MFA_CHALLENGE_EXPIRED", "Session de vérification expirée, reconnectez-vous.", 401);
+    }
+
+    const db = getDb();
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, subject), isNull(users.deletedAt)))
+      .limit(1);
+    if (!user || user.status !== "active" || !user.mfaEnabled || !user.mfaSecret) {
+      throw AppError.unauthorized("Vérification impossible, reconnectez-vous.");
+    }
+
+    const throttleKey = `mfa:${user.id}`;
+    if (!throttle.hit(throttleKey, 8, 10 * 60 * 1000)) throw AppError.rateLimited();
+    if (!verifyTotp(decryptSecret(user.mfaSecret), input.code)) {
+      await audit({
+        tenantId: user.tenantId,
+        actorId: user.id,
+        action: "auth.mfa_failed",
+        entity: "user",
+        entityId: user.id,
+        ...meta,
+      });
+      throw new AppError("INVALID_MFA_CODE", "Code invalide ou expiré.", 401);
+    }
+    throttle.resetKey(throttleKey);
+
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
+    if (!tenant || tenant.deletedAt || tenant.status === "suspended" || tenant.status === "inactive") {
+      throw AppError.forbidden("Espace de travail indisponible", "TENANT_SUSPENDED");
+    }
+
+    await db
+      .update(users)
+      .set({ lastLoginAt: new Date(), mfaLastUsedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenant.id)).limit(1);
+    await audit({
+      tenantId: tenant.id,
+      actorId: user.id,
+      action: "auth.mfa_login",
+      entity: "user",
+      entityId: user.id,
+      ...meta,
+    });
+
+    return this.buildAuthResponse(user, tenant, settings ?? null, meta);
+  }
+
   private async buildAuthResponse(
     user: typeof users.$inferSelect,
     tenant: typeof tenants.$inferSelect,
@@ -389,6 +617,7 @@ export class AuthService {
       user: serializeUser(user),
       tenant: serializeTenant(tenant, settings),
       permissions: permissionsFor(user.role),
+      mfaEnabled: user.mfaEnabled,
     };
   }
 }

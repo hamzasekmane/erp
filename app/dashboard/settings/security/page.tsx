@@ -1,6 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import {
+  getMfaStatusAction,
+  mfaDisableAction,
+  mfaEnableAction,
+  mfaSetupAction,
+  type MfaSetupData,
+  type MfaStatusData,
+} from '@/app/actions/mfaActions';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -39,10 +48,25 @@ export default function SecuritySettingsPage() {
     confirmPassword: ''
   });
 
-  // 2FA state
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  // 2FA state (real TOTP backed by the API)
+  const [mfaStatus, setMfaStatus] = useState<MfaStatusData | null>(null);
+  const [mfaSetup, setMfaSetup] = useState<MfaSetupData | null>(null);
   const [show2FASetup, setShow2FASetup] = useState(false);
+  const [show2FADisable, setShow2FADisable] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const twoFactorEnabled = Boolean(mfaStatus?.enabled);
+
+  const refreshMfaStatus = useCallback(async () => {
+    const result = await getMfaStatusAction();
+    if (result.data) setMfaStatus(result.data);
+    else if (result.error) setMessage({ type: 'error', text: result.error });
+  }, []);
+
+  useEffect(() => {
+    void refreshMfaStatus();
+  }, [refreshMfaStatus]);
 
   // Active sessions
   const [sessions] = useState([
@@ -141,34 +165,58 @@ export default function SecuritySettingsPage() {
     }
   };
 
-  const handleEnable2FA = async () => {
-    setIsLoading(true);
+  const handleStart2FA = async () => {
+    setMfaBusy(true);
+    setMessage(null);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setTwoFactorEnabled(true);
-      setShow2FASetup(false);
-      setMessage({ type: 'success', text: 'Authentification à deux facteurs activée' });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Erreur lors de l\'activation' });
+      const result = await mfaSetupAction();
+      if (result.error || !result.data) {
+        setMessage({ type: 'error', text: result.error || "Configuration impossible" });
+        return;
+      }
+      setMfaSetup(result.data);
+      setVerificationCode('');
+      setShow2FASetup(true);
     } finally {
-      setIsLoading(false);
-      setTimeout(() => setMessage(null), 3000);
+      setMfaBusy(false);
+    }
+  };
+
+  const handleEnable2FA = async () => {
+    setMfaBusy(true);
+    try {
+      const result = await mfaEnableAction(verificationCode);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+        return;
+      }
+      setShow2FASetup(false);
+      setMfaSetup(null);
+      setVerificationCode('');
+      await refreshMfaStatus();
+      setMessage({ type: 'success', text: 'Authentification à deux facteurs activée' });
+    } finally {
+      setMfaBusy(false);
+      setTimeout(() => setMessage(null), 4000);
     }
   };
 
   const handleDisable2FA = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir désactiver l\'authentification à deux facteurs ?')) return;
-    
-    setIsLoading(true);
+    setMfaBusy(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setTwoFactorEnabled(false);
+      const result = await mfaDisableAction(disablePassword, verificationCode);
+      if (result.error) {
+        setMessage({ type: 'error', text: result.error });
+        return;
+      }
+      setShow2FADisable(false);
+      setDisablePassword('');
+      setVerificationCode('');
+      await refreshMfaStatus();
       setMessage({ type: 'success', text: 'Authentification à deux facteurs désactivée' });
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Erreur lors de la désactivation' });
     } finally {
-      setIsLoading(false);
-      setTimeout(() => setMessage(null), 3000);
+      setMfaBusy(false);
+      setTimeout(() => setMessage(null), 4000);
     }
   };
 
@@ -390,16 +438,33 @@ export default function SecuritySettingsPage() {
               Ajoutez une couche de sécurité supplémentaire à votre compte en exigeant un code de vérification à chaque connexion.
             </p>
             
+            {mfaStatus?.required && !twoFactorEnabled && (
+              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-amber-500">
+                Obligatoire pour les super-administrateurs
+              </p>
+            )}
+            <p className="mb-3 text-[10px] text-[var(--foreground-muted)]">
+              {mfaStatus
+                ? mfaStatus.enabled
+                  ? `Active · ${mfaStatus.issuer}`
+                  : mfaStatus.pending
+                    ? 'Configuration en attente de confirmation'
+                    : 'Inactive'
+                : 'Chargement du statut…'}
+              {mfaStatus && !mfaStatus.storageReady && ' · chiffrement des secrets non configuré'}
+            </p>
+
             {!twoFactorEnabled ? (
               <button
-                onClick={() => setShow2FASetup(true)}
-                className="w-full px-4 py-2 border border-[var(--border)] rounded-xl hover:border-emerald-500/50 transition-colors"
+                onClick={handleStart2FA}
+                disabled={mfaBusy}
+                className="w-full px-4 py-2 border border-[var(--border)] rounded-xl hover:border-emerald-500/50 transition-colors disabled:opacity-50"
               >
-                Activer la 2FA
+                {mfaBusy ? 'Préparation…' : 'Activer la 2FA'}
               </button>
             ) : (
               <button
-                onClick={handleDisable2FA}
+                onClick={() => { setVerificationCode(''); setDisablePassword(''); setShow2FADisable(true); }}
                 className="w-full px-4 py-2 border border-red-500/30 text-red-500 rounded-xl hover:bg-red-500/10 transition-colors"
               >
                 Désactiver la 2FA
@@ -593,53 +658,107 @@ export default function SecuritySettingsPage() {
         </div>
       </div>
 
-      {/* 2FA Setup Modal */}
-      {show2FASetup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-[var(--card-bg)] rounded-2xl max-w-md w-full p-6">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Smartphone size={32} className="text-emerald-500" />
+      {/* 2FA Setup Modal (real TOTP enrollment) */}
+      {show2FASetup && mfaSetup && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-[var(--card-bg)] rounded-2xl max-w-md w-full p-5 sm:p-6 my-8">
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Smartphone size={26} className="text-emerald-500" />
               </div>
-              <h3 className="text-xl font-black mb-2">Configurer la 2FA</h3>
-              <p className="text-sm text-[var(--foreground-muted)]">
-                Scannez le QR code avec Google Authenticator ou une application similaire
+              <h3 className="text-lg font-black mb-1">Configurer la double authentification</h3>
+              <p className="text-xs text-[var(--foreground-muted)]">
+                Scannez ce QR code avec Google Authenticator, Authy ou 1Password.
               </p>
             </div>
-            
+
             <div className="bg-white p-4 rounded-xl mb-4 flex justify-center">
-              <div className="w-48 h-48 bg-gray-200 flex items-center justify-center text-gray-400">
-                [QR Code]
-              </div>
+              <QRCodeSVG value={mfaSetup.otpauthUrl} size={176} level="M" />
             </div>
-            
+
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 mb-4">
+              <p className="text-[9px] font-black uppercase tracking-widest text-[var(--foreground-muted)] mb-1">
+                Saisie manuelle
+              </p>
+              <p className="text-[11px] font-mono break-all">{mfaSetup.secret}</p>
+              <p className="text-[9px] text-[var(--foreground-muted)] mt-1">
+                {mfaSetup.account} · {mfaSetup.issuer} · {mfaSetup.digits} chiffres / {mfaSetup.period}s
+              </p>
+            </div>
+
             <div className="mb-4">
-              <label className="text-sm font-medium mb-2 block">
+              <label className="text-[10px] font-black uppercase tracking-widest mb-2 block">
                 Code de vérification
               </label>
               <input
                 type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 placeholder="000000"
                 value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value)}
-                className="w-full px-4 py-2 text-center text-2xl tracking-widest bg-[var(--background)] border border-[var(--border)] rounded-xl focus:outline-none focus:border-emerald-500/50"
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full px-4 py-2 text-center text-2xl tracking-[0.4em] font-black bg-[var(--background)] border border-[var(--border)] rounded-xl focus:outline-none focus:border-emerald-500/50"
                 maxLength={6}
               />
             </div>
-            
+
             <div className="flex flex-wrap gap-2 sm:gap-3">
               <button
-                onClick={() => setShow2FASetup(false)}
-                className="flex-1 px-4 py-2 border border-[var(--border)] rounded-xl hover:bg-[var(--accent)]/5 transition-colors"
+                onClick={() => { setShow2FASetup(false); setMfaSetup(null); setVerificationCode(''); }}
+                className="flex-1 px-4 py-2 border border-[var(--border)] rounded-xl hover:bg-[var(--accent)]/5 transition-colors text-xs font-bold"
               >
                 Annuler
               </button>
               <button
                 onClick={handleEnable2FA}
-                disabled={verificationCode.length !== 6}
-                className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                disabled={verificationCode.length !== 6 || mfaBusy}
+                className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-xs hover:bg-emerald-600 transition-colors disabled:opacity-50"
               >
-                Vérifier et activer
+                {mfaBusy ? 'Vérification…' : 'Vérifier et activer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2FA Disable Modal (password + code) */}
+      {show2FADisable && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-[var(--card-bg)] rounded-2xl max-w-md w-full p-5 sm:p-6 my-8 space-y-4">
+            <h3 className="text-lg font-black">Désactiver la double authentification</h3>
+            <p className="text-xs text-[var(--foreground-muted)]">
+              Confirmez avec votre mot de passe et un code courant.
+            </p>
+            <input
+              type="password"
+              value={disablePassword}
+              onChange={(e) => setDisablePassword(e.target.value)}
+              placeholder="Mot de passe"
+              autoComplete="current-password"
+              className="w-full px-4 py-2.5 rounded-xl bg-[var(--background)] border border-[var(--border)] text-sm focus:outline-none focus:border-red-500/50"
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="000000"
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full px-4 py-2.5 text-center text-xl tracking-[0.3em] font-black rounded-xl bg-[var(--background)] border border-[var(--border)] focus:outline-none focus:border-red-500/50"
+              maxLength={6}
+            />
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              <button
+                onClick={() => { setShow2FADisable(false); setDisablePassword(''); setVerificationCode(''); }}
+                className="flex-1 px-4 py-2 border border-[var(--border)] rounded-xl text-xs font-bold hover:bg-[var(--accent)]/5"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDisable2FA}
+                disabled={!disablePassword || verificationCode.length !== 6 || mfaBusy}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-xl text-xs font-bold hover:bg-red-600 disabled:opacity-50"
+              >
+                {mfaBusy ? 'Désactivation…' : 'Désactiver'}
               </button>
             </div>
           </div>

@@ -1,8 +1,33 @@
 "use server";
 import { loginSchema } from "@/app/lib/zod-schemas";
+import { apiBaseUrl } from "@/app/lib/apiBase";
 import { apiService } from "@/app/services/api";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+
+type SessionPayload = {
+  token?: string;
+  tenant?: { id?: string };
+  user?: { name?: string };
+};
+
+/**
+ * Stores the session cookies once the API finally issued a token
+ * (with or without the MFA step).
+ */
+async function persistSession(result: SessionPayload) {
+  const cookieStore = await cookies();
+  const isProd = process.env.NODE_ENV === "production";
+  const common = {
+    secure: isProd,
+    sameSite: "strict" as const,
+    maxAge: 60 * 60 * 24 * 7,
+    path: "/",
+  };
+
+  cookieStore.set("token", result.token ?? "", { ...common, httpOnly: true });
+  if (result.tenant?.id) cookieStore.set("tenantId", result.tenant.id, common);
+  if (result.user?.name) cookieStore.set("user_name", result.user.name, common);
+}
 
 export async function loginAction(prevState: any, formData: FormData) {
   const rawData = Object.fromEntries(formData.entries());
@@ -27,40 +52,54 @@ export async function loginAction(prevState: any, formData: FormData) {
       };
     }
 
-    const cookieStore = await cookies();
-    const isProd = process.env.NODE_ENV === "production";
-    
-    // 1. Store the JWT (HTTP-Only for security)
-    cookieStore.set("token", result.token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: "strict",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
-
-    // 2. Store Tenant ID for context
-    if (result.tenant?.id) {
-      cookieStore.set("tenantId", result.tenant.id, {
-        secure: isProd,
-        sameSite: "strict",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      });
+    // MFA enabled: the API returns a 5-minute challenge instead of a session.
+    if (result.mfaRequired) {
+      return {
+        success: false,
+        mfaRequired: true,
+        challengeToken: result.challengeToken as string,
+        message: "أدخل رمز التحقق من تطبيق المصادقة",
+      };
     }
 
-    // 3. Store basic User info for UI
-    if (result.user) {
-      cookieStore.set("user_name", result.user.name, {
-        secure: isProd,
-        sameSite: "strict",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      });
-    }
-
+    await persistSession(result);
     return { success: true, message: "تم تسجيل الدخول بنجاح" };
   } catch (error) {
     return { success: false, message: "خطأ في الاتصال بالخادم" };
+  }
+}
+
+/** Step 2 of the login flow: exchanges the TOTP code for a session. */
+export async function mfaVerifyAction(prevState: any, formData: FormData) {
+  const challengeToken = String(formData.get("challengeToken") ?? "");
+  const code = String(formData.get("code") ?? "").replace(/\s+/g, "");
+
+  if (!/^\d{6}$/.test(code)) {
+    return { success: false, mfaRequired: true, challengeToken, message: "الرمز يجب أن يتكون من 6 أرقام" };
+  }
+
+  try {
+    const response = await fetch(`${apiBaseUrl()}/auth/mfa/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challengeToken, code }),
+      cache: "no-store",
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const expired = result?.error_code === "MFA_CHALLENGE_EXPIRED";
+      return {
+        success: false,
+        mfaRequired: !expired,
+        challengeToken: expired ? "" : challengeToken,
+        message: result?.message || "رمز غير صالح",
+      };
+    }
+
+    await persistSession(result);
+    return { success: true, message: "تم التحقق بنجاح" };
+  } catch {
+    return { success: false, mfaRequired: true, challengeToken, message: "خطأ في الاتصال بالخادم" };
   }
 }

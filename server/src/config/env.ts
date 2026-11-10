@@ -47,6 +47,9 @@ const schema = z.object({
   CHARGILY_SECRET_KEY: z.string().optional().default(""),
   CHARGILY_WEBHOOK_URL: z.string().optional().default(""),
   SECRETS_ENCRYPTION_KEY: z.string().optional().default(""),
+  // Multi-factor authentication (TOTP)
+  MFA_ISSUER: z.string().default("Velora ERP"),
+  MFA_REQUIRE_SUPERADMIN: bool,
   // Scheduled maintenance
   MAINTENANCE_INTERVAL_MS: z.coerce.number().int().min(0).default(6 * 60 * 60 * 1000),
   MAINTENANCE_DISABLED: bool,
@@ -80,6 +83,9 @@ if (isProd) {
     if (!env.SECRETS_ENCRYPTION_KEY) {
       productionProblems.push("SECRETS_ENCRYPTION_KEY is required to store payment gateway credentials");
     }
+  }
+  if (env.MFA_REQUIRE_SUPERADMIN && !env.SECRETS_ENCRYPTION_KEY) {
+    productionProblems.push("SECRETS_ENCRYPTION_KEY is required to store MFA secrets");
   }
   if (env.SMTP_URL === "" && env.MAIL_OUTBOX_DIR.startsWith(".data")) {
     // Not fatal: the outbox keeps messages until SMTP is configured.

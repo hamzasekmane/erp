@@ -7,12 +7,18 @@ import {
   forgotPasswordSchema,
   loginSchema,
   logoutSchema,
+  mfaCodeSchema,
+  mfaDisableSchema,
+  mfaVerifySchema,
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
   type ForgotPasswordInput,
   type LoginInput,
   type LogoutInput,
+  type MfaCodeInput,
+  type MfaDisableInput,
+  type MfaVerifyInput,
   type RefreshInput,
   type RegisterInput,
   type ResetPasswordInput,
@@ -60,6 +66,45 @@ export class AuthController {
     @Req() req: Request,
   ) {
     return this.auth.logout(auth, body, meta(req));
+  }
+
+  /** Step 2 of the login flow when the account has TOTP enabled. */
+  @Public()
+  @Post("mfa/verify")
+  @HttpCode(200)
+  async verifyMfa(@Body(new ZodValidationPipe(mfaVerifySchema)) body: MfaVerifyInput, @Req() req: Request) {
+    return { success: true, ...(await this.auth.verifyMfa(body, meta(req))) };
+  }
+
+  @Get("mfa")
+  async mfaStatus(@CurrentAuth() auth: AuthContext) {
+    return ok(await this.auth.mfaStatus(auth));
+  }
+
+  @Post("mfa/setup")
+  @HttpCode(200)
+  async mfaSetup(@CurrentAuth() auth: AuthContext, @Req() req: Request) {
+    return ok(await this.auth.mfaSetup(auth, meta(req)), "Secret TOTP généré");
+  }
+
+  @Post("mfa/enable")
+  @HttpCode(200)
+  async mfaEnable(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(mfaCodeSchema)) body: MfaCodeInput,
+    @Req() req: Request,
+  ) {
+    return ok(await this.auth.mfaEnable(auth, body, meta(req)), "Double authentification activée");
+  }
+
+  @Post("mfa/disable")
+  @HttpCode(200)
+  async mfaDisable(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(mfaDisableSchema)) body: MfaDisableInput,
+    @Req() req: Request,
+  ) {
+    return ok(await this.auth.mfaDisable(auth, body, meta(req)), "Double authentification désactivée");
   }
 
   @Get("me")

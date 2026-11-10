@@ -324,11 +324,53 @@ existante par carte CIB ou carte EDAHABIA (Algérie Poste), en dinars algériens
 - `createCheckout` sans réseau sortant (sandbox) → `400 PAYMENT_PROVIDER_ERROR` (échec propre, pas de
   crash) ; facture déjà soldée → `422 INVOICE_ALREADY_PAID`.
 
+## 12 quater. Double authentification (TOTP)
+
+Les comptes peuvent être protégés par un code à 6 chiffres (RFC 6238), compatible Google
+Authenticator, Authy, 1Password, FreeOTP. Implémentation interne (`server/src/shared/security/totp.ts`,
+HMAC-SHA1, pas de dépendance npm) validée sur les vecteurs de test de la RFC.
+
+**Flux de connexion**
+
+1. `POST /api/auth/login` avec un compte sans MFA → réponse inchangée (`token`, `refreshToken`, …).
+2. Compte avec MFA → `200 {mfaRequired: true, challengeToken, expiresIn: 300}` : **aucun jeton de session
+   n'est émis**. Le ticket est un JWT signé (`typ: "mfa"`) valable 5 minutes.
+3. `POST /api/auth/mfa/verify {challengeToken, code}` → session complète. Code erroné : `401
+   INVALID_MFA_CODE` (throttle 8 essais / 10 min par utilisateur) ; ticket expiré ou forgé : `401
+   MFA_CHALLENGE_EXPIRED`.
+4. Côté Next.js, `app/actions/loginAction.ts` expose `loginAction` puis `mfaVerifyAction` : les cookies
+   `token`/`tenantId`/`user_name` ne sont posés qu'après la validation du code.
+
+**Enrôlement / révocation**
+
+| Endpoint | Rôle |
+| --- | --- |
+| `GET /api/auth/mfa` | `{enabled, pending, required, issuer, storageReady}` |
+| `POST /api/auth/mfa/setup` | Génère un secret TOTP (chiffré en base, MFA encore inactive) + `otpauthUrl` pour le QR |
+| `POST /api/auth/mfa/enable {code}` | Confirme le premier code et active la MFA |
+| `POST /api/auth/mfa/disable {password, code}` | Désactive (mot de passe **et** code exigés) |
+
+- Le secret est chiffré en AES-256-GCM (`SECRETS_ENCRYPTION_KEY`) ; sans clé, `setup` renvoie
+  `503 MFA_UNAVAILABLE` et `GET /api/auth/mfa` indique `storageReady: false`.
+- `MFA_REQUIRE_SUPERADMIN=true` rend la MFA obligatoire pour le rôle `superadmin` (`required: true`,
+  désactivation refusée avec `403 MFA_REQUIRED`) ; la configuration de production exige alors
+  `SECRETS_ENCRYPTION_KEY`.
+- Chaque étape est auditée : `auth.mfa_challenge`, `auth.mfa_setup_started`, `auth.mfa_enabled`,
+  `auth.mfa_login`, `auth.mfa_failed`, `auth.mfa_disabled`.
+- UI : page Paramètres → Sécurité, carte « Authentification à deux facteurs » (QR `qrcode.react`, saisie
+  manuelle du secret, statut réel, désactivation avec mot de passe + code).
+
+**Vérifications exécutées** (`server/src/test/api.e2e.test.ts`, 9 cas) : statut initial désactivé, génération
+du secret, refus d'un code invalide, activation, login sans jeton + challenge, refus du mauvais code puis
+succès, ticket forgé rejeté, désactivation protégée par mot de passe et code, retour au login classique.
+Tests unitaires TOTP : 7 cas dont les vecteurs RFC 6238 (`94287082`, `07081804`, `69279037`).
+
 ## 13. Limites connues avant une ouverture publique large
 
 - Chargily Pay est intégré et vérifié en mode test local (webhook signé + revérification) mais aucun
   aller-retour réel avec le tableau de bord Chargily n'a été exécuté depuis cet environnement (pas de
   sortie réseau) : la recette doit être refaite en staging avec une vraie clé `test_sk_…`.
-- Superadmin authentifié sur le tenant « platform » : MFA et séparation réseau restent à ajouter.
+- Superadmin authentifié sur le tenant « platform » : la MFA est disponible (TOTP) mais son caractère
+  obligatoire dépend de `MFA_REQUIRE_SUPERADMIN` ; la séparation réseau reste à faire.
 - Pas d'antivirus sur les uploads, pas de quota de stockage par formule.
 - Limiteur de débit en mémoire (par instance) et outbox mono-worker.

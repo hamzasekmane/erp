@@ -5,7 +5,16 @@ import { createClientSchema, updateClientSchema } from "../modules/clients/clien
 import { createProductSchema, createCategorySchema, createTaxSchema } from "../modules/catalog/catalog.dto";
 import { createInvoiceSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
 import { createPaymentSchema, gatewaySchema, refundSchema } from "../modules/payments/payments.dto";
-import { forgotPasswordSchema, loginSchema, refreshSchema, registerSchema, resetPasswordSchema } from "../modules/auth/auth.dto";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  mfaCodeSchema,
+  mfaDisableSchema,
+  mfaVerifySchema,
+  refreshSchema,
+  registerSchema,
+  resetPasswordSchema,
+} from "../modules/auth/auth.dto";
 import { changePasswordSchema, createUserSchema, updateUserSchema } from "../modules/users/users.dto";
 import { changeSubscriptionSchema, updateSecuritySchema, updateSettingsSchema, updateTenantSchema } from "../modules/tenancy/tenancy.dto";
 
@@ -147,6 +156,13 @@ register("get", "/invoices/:id/view", "Invoices", "Vue publique", { params: idPa
 register("delete", "/invoices/:id", "Invoices", "Supprimer une facture", { params: idParams });
 
 /* payments */
+/* auth: MFA (TOTP) */
+register("post", "/auth/mfa/verify", "Auth", "Valider le code MFA et obtenir une session", { body: mfaVerifySchema, security: false });
+register("get", "/auth/mfa", "Auth", "Statut MFA de l'utilisateur courant");
+register("post", "/auth/mfa/setup", "Auth", "Générer un secret TOTP (non activé)");
+register("post", "/auth/mfa/enable", "Auth", "Confirmer et activer la MFA", { body: mfaCodeSchema });
+register("post", "/auth/mfa/disable", "Auth", "Désactiver la MFA (mot de passe + code)", { body: mfaDisableSchema });
+
 register("get", "/payments", "Payments", "Lister les paiements", { query: pageQuery, response: listResponse(z.unknown()) });
 register("get", "/payments/stats", "Payments", "Statistiques de paiement");
 register("post", "/payments", "Payments", "Enregistrer un paiement", { body: createPaymentSchema });

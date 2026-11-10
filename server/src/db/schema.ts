@@ -111,6 +111,11 @@ export const users = pgTable(
     department: text("department"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     tokenVersion: integer("token_version").notNull().default(0),
+    // TOTP (RFC 6238) — the secret is stored encrypted (see shared/security/secrets.ts)
+    mfaSecret: text("mfa_secret"),
+    mfaEnabled: boolean("mfa_enabled").notNull().default(false),
+    mfaEnabledAt: timestamp("mfa_enabled_at", { withTimezone: true }),
+    mfaLastUsedAt: timestamp("mfa_last_used_at", { withTimezone: true }),
     legacyId: text("legacy_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

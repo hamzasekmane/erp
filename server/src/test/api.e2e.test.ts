@@ -2,6 +2,7 @@ import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeTestApp, createTestApp } from "./app";
+import { totpCode } from "../shared/security/totp";
 
 let app: INestApplication;
 let http: ReturnType<typeof request>;
@@ -203,6 +204,105 @@ describe("clients, invoices and payments", () => {
     const res = await http.post("/api/clients").set("Authorization", `Bearer ${tokenA}`).send({ name: "" }).expect(400);
     expect(res.body.error_code).toBe("VALIDATION_ERROR");
     expect(Array.isArray(res.body.errors)).toBe(true);
+  });
+});
+
+
+describe("mfa (TOTP)", () => {
+  const tenantC = {
+    tenantData: { name: "Gamma SARL", businessName: "Gamma SARL", contact: { email: "contact@gamma.dz" }, currency: "DZD", language: "fr" },
+    userData: { name: "Admin Gamma", email: "admin@gamma.dz", password: "GammaPass123" },
+    planCode: "starter",
+  };
+  let token = "";
+  let secret = "";
+
+  it("registers a tenant for the MFA flow", async () => {
+    const res = await http.post("/api/auth/register").send(tenantC).expect(201);
+    token = res.body.token;
+    expect(res.body.mfaEnabled).toBe(false);
+  });
+
+  it("reports MFA as disabled with storage ready", async () => {
+    const res = await http.get("/api/auth/mfa").set("Authorization", `Bearer ${token}`).expect(200);
+    expect(res.body.data).toMatchObject({ enabled: false, pending: false, required: false, storageReady: true });
+  });
+
+  it("generates a pending TOTP secret without enabling it", async () => {
+    const res = await http.post("/api/auth/mfa/setup").set("Authorization", `Bearer ${token}`).expect(200);
+    secret = res.body.data.secret;
+    expect(secret).toHaveLength(32);
+    expect(res.body.data.otpauthUrl).toContain("otpauth://totp/Velora%20ERP%20Test%3Aadmin%40gamma.dz");
+    const status = await http.get("/api/auth/mfa").set("Authorization", `Bearer ${token}`).expect(200);
+    expect(status.body.data).toMatchObject({ enabled: false, pending: true });
+  });
+
+  it("rejects an invalid confirmation code", async () => {
+    const res = await http.post("/api/auth/mfa/enable").set("Authorization", `Bearer ${token}`).send({ code: "000000" }).expect(400);
+    expect(res.body.error_code).toBe("INVALID_MFA_CODE");
+  });
+
+  it("enables MFA with a valid code", async () => {
+    const res = await http.post("/api/auth/mfa/enable").set("Authorization", `Bearer ${token}`).send({ code: totpCode(secret) }).expect(200);
+    expect(res.body.data.enabled).toBe(true);
+    const status = await http.get("/api/auth/mfa").set("Authorization", `Bearer ${token}`).expect(200);
+    expect(status.body.data.enabled).toBe(true);
+  });
+
+  it("refuses to rotate the secret while MFA is active", async () => {
+    const res = await http.post("/api/auth/mfa/setup").set("Authorization", `Bearer ${token}`).expect(409);
+    expect(res.body.error_code).toBe("MFA_ALREADY_ENABLED");
+  });
+
+  it("requires a code at login instead of issuing tokens", async () => {
+    const res = await http.post("/api/auth/login").send({ email: tenantC.userData.email, password: tenantC.userData.password }).expect(200);
+    expect(res.body.mfaRequired).toBe(true);
+    expect(typeof res.body.challengeToken).toBe("string");
+    expect(res.body.token).toBeUndefined();
+  });
+
+  it("rejects a wrong code and accepts the right one", async () => {
+    const login = await http.post("/api/auth/login").send({ email: tenantC.userData.email, password: tenantC.userData.password }).expect(200);
+    const challengeToken = login.body.challengeToken;
+
+    const wrong = await http.post("/api/auth/mfa/verify").send({ challengeToken, code: "000000" }).expect(401);
+    expect(wrong.body.error_code).toBe("INVALID_MFA_CODE");
+
+    const ok = await http.post("/api/auth/mfa/verify").send({ challengeToken, code: totpCode(secret) }).expect(200);
+    expect(typeof ok.body.token).toBe("string");
+    expect(typeof ok.body.refreshToken).toBe("string");
+    expect(ok.body.mfaEnabled).toBe(true);
+  });
+
+  it("rejects an expired or forged challenge token", async () => {
+    const res = await http.post("/api/auth/mfa/verify").send({ challengeToken: "not-a-real-token", code: "123456" }).expect(401);
+    expect(res.body.error_code).toBe("MFA_CHALLENGE_EXPIRED");
+  });
+
+  it("requires password and code to disable MFA", async () => {
+    const badPassword = await http
+      .post("/api/auth/mfa/disable")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ password: "wrong-password", code: totpCode(secret) })
+      .expect(401);
+    expect(badPassword.body.error_code).toBe("UNAUTHORIZED");
+
+    const badCode = await http
+      .post("/api/auth/mfa/disable")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ password: tenantC.userData.password, code: "000000" })
+      .expect(400);
+    expect(badCode.body.error_code).toBe("INVALID_MFA_CODE");
+
+    await http
+      .post("/api/auth/mfa/disable")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ password: tenantC.userData.password, code: totpCode(secret) })
+      .expect(200);
+
+    const login = await http.post("/api/auth/login").send({ email: tenantC.userData.email, password: tenantC.userData.password }).expect(200);
+    expect(typeof login.body.token).toBe("string");
+    expect(login.body.mfaRequired).toBeUndefined();
   });
 });
 

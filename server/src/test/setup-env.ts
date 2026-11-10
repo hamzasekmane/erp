@@ -11,3 +11,5 @@ process.env.UPLOAD_DIR = `${process.env.PGLITE_DATA_DIR}/uploads`;
 process.env.MAINTENANCE_TOKEN = "test-maintenance-token";
 process.env.APP_URL = "http://localhost:3000";
 process.env.REFRESH_TOKEN_TTL_DAYS = "30";
+process.env.SECRETS_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.MFA_ISSUER = "Velora ERP Test";

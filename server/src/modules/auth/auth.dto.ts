@@ -66,3 +66,21 @@ export type RefreshInput = z.infer<typeof refreshSchema>;
 export type LogoutInput = z.infer<typeof logoutSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+/* ------------------------------- MFA (TOTP) ------------------------------ */
+
+const codeField = z.string().regex(/^\d{6}$/, "Code à 6 chiffres requis");
+
+export const mfaCodeSchema = z.object({ code: codeField });
+export const mfaVerifySchema = z.object({
+  challengeToken: z.string().min(10, "Jeton de vérification requis"),
+  code: codeField,
+});
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1, "Mot de passe requis"),
+  code: codeField,
+});
+
+export type MfaCodeInput = z.infer<typeof mfaCodeSchema>;
+export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
+export type MfaDisableInput = z.infer<typeof mfaDisableSchema>;

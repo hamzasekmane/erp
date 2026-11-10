@@ -48,3 +48,20 @@ export function hashToken(token: string): string {
 export function refreshExpiryDate(from = new Date()): Date {
   return new Date(from.getTime() + env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
 }
+
+/** Short-lived ticket issued after a correct password when MFA is enabled. */
+export async function signMfaChallenge(userId: string): Promise<string> {
+  return new SignJWT({ typ: "mfa" })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setJti(randomBytes(12).toString("base64url"))
+    .setExpirationTime("5m")
+    .sign(secret);
+}
+
+export async function verifyMfaChallenge(token: string): Promise<{ sub: string }> {
+  const { payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] });
+  if (payload.typ !== "mfa" || typeof payload.sub !== "string") throw new Error("Invalid MFA challenge");
+  return { sub: payload.sub };
+}
