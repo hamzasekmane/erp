@@ -543,7 +543,7 @@ export default function AnalyticsDashboardClient({
               </div>
             </div>
 
-            <div className="h-64 flex items-end gap-2 mt-8">
+            <div className="h-56 sm:h-64 flex items-end gap-1 sm:gap-2 mt-6 sm:mt-8">
               {chartData.length > 0 ? (
                 chartData.map((item, index) => (
                   <div key={index} className="flex-1 flex flex-col items-center gap-2">

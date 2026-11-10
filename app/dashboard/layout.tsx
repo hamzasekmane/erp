@@ -40,7 +40,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </Suspense>
 
         {/* Main content – reduced padding to save vertical space */}
-        <main className="flex-1 overflow-y-auto p-2 sm:p-3 lg:p-4 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 lg:p-4 custom-scrollbar">
           {/* Background decorative blobs – adjusted to not cause overflow */}
           <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
             <div className="absolute top-[-20%] right-[-20%] w-[500px] h-[500px] bg-[var(--accent)]/5 rounded-full blur-[120px]" />
