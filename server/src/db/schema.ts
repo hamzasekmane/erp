@@ -1034,11 +1034,16 @@ export const uploads = pgTable(
     size: integer("size").notNull(),
     storagePath: text("storage_path").notNull(),
     uploadedBy: text("uploaded_by").references(() => users.id),
+    scanStatus: text("scan_status").notNull().default("clean"),
+    scanEngine: text("scan_engine"),
+    scanSignature: text("scan_signature"),
+    scannedAt: timestamp("scanned_at", { withTimezone: true }),
     createdAt: createdAt(),
     deletedAt: deletedAt(),
   },
   (t) => [
     index("uploads_tenant_created_idx").on(t.tenantId, t.createdAt),
     check("uploads_kind_chk", sql`${t.kind} in ('logo','document','attachment','import')`),
+    check("uploads_scan_status_chk", sql`${t.scanStatus} in ('clean','infected','skipped','error')`),
   ],
 );

@@ -32,6 +32,18 @@ export default async function ArchivesPage() {
   const stats = await serverApi<{ totalDocuments: number; byCategory: Array<{ category: string; count: number }> }>("/archives/stats");
   const countFor = (category: string) => stats?.byCategory.find((row) => row.category === category)?.count ?? 0;
   const documents = (await serverApi<Array<{ id: string; name: string; category: string; createdAt?: string }>>("/archives/documents?limit=5")) ?? [];
+  const storage = await serverApi<{
+    usedBytes: number;
+    limitBytes: number;
+    usedMb: number;
+    limitMb: number;
+    percent: number;
+    count: number;
+    antivirus: { configured: boolean; engine: string };
+  }>("/uploads/usage");
+
+  const formatSize = (mb: number) => (mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`);
+  const storagePercent = storage?.percent ?? 0;
 
   const archiveSections: ArchiveSection[] = [
     {
@@ -127,8 +139,15 @@ export default async function ArchivesPage() {
             </div>
             <div className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-center">
               <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase">Espace utilisé</p>
-              <p className="text-xl font-black text-emerald-500">2.4 GB</p>
-              <p className="text-[8px] text-[var(--foreground-muted)]">Sur 10 GB</p>
+              <p className="text-xl font-black text-emerald-500">{formatSize(storage?.usedMb ?? 0)}</p>
+              <p className="text-[8px] text-[var(--foreground-muted)]">Sur {formatSize(storage?.limitMb ?? 0)}</p>
+            </div>
+            <div className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-center">
+              <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase">Fichiers</p>
+              <p className="text-xl font-black text-blue-500">{storage?.count ?? 0}</p>
+              <p className="text-[8px] text-[var(--foreground-muted)]">
+                {storage?.antivirus.configured ? "ClamAV actif" : "Scan intégré"}
+              </p>
             </div>
           </div>
         </div>
@@ -148,7 +167,7 @@ export default async function ArchivesPage() {
               <HardDrive size={16} className="text-[var(--foreground-muted)]" />
               <span className="text-[8px] font-mono text-[var(--foreground-muted)]">STORAGE</span>
             </div>
-            <p className="text-lg font-black">24%</p>
+            <p className="text-lg font-black">{storagePercent}%</p>
             <p className="text-[10px] text-[var(--foreground-muted)]">Espace utilisé</p>
           </div>
           <div className="p-4 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl">

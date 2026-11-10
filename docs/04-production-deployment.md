@@ -365,6 +365,42 @@ du secret, refus d'un code invalide, activation, login sans jeton + challenge, r
 succès, ticket forgé rejeté, désactivation protégée par mot de passe et code, retour au login classique.
 Tests unitaires TOTP : 7 cas dont les vecteurs RFC 6238 (`94287082`, `07081804`, `69279037`).
 
+## 12 quinquies. Téléversements : antivirus et quotas
+
+**Antivirus (deux moteurs)**
+
+1. **Moteur interne** (`server/src/shared/security/antivirus.ts`) — toujours actif, sans dépendance :
+   signature EICAR, en-têtes exécutables (`MZ`, `ELF`, Mach-O, `#!`) déguisés derrière une extension
+   autorisée, classeurs avec macro VBA (`vbaProject.bin`), PDF contenant `/Launch` ou `/EmbeddedFile`.
+2. **ClamAV** — dès que `CLAMAV_HOST` est défini, chaque fichier est envoyé au démon via le protocole
+   INSTREAM (`zINSTREAM`, chunks préfixés par leur taille, timeout 10 s). `FOUND` → rejet. Démon
+   injoignable : avec `AV_FAIL_CLOSED=true` (défaut) et `NODE_ENV=production`, l'upload est refusé par
+   `503 SCAN_UNAVAILABLE` ; hors production, repli sur le moteur interne avec journalisation.
+
+Un fichier rejeté **n'est jamais écrit sur disque** ni enregistré en base ; l'événement `upload.blocked`
+est audité avec la signature détectée. Les colonnes `uploads.scan_status`, `scan_engine`,
+`scan_signature`, `scanned_at` conservent la preuve du scan (migration `0005_normal_havok.sql`).
+
+**Quotas de stockage**
+
+- Le quota vient de la formule d'abonnement courante (`plans.limits.storageMb`, sinon
+  `DEFAULT_STORAGE_QUOTA_MB`, 500 Mo par défaut).
+- Avant écriture : `used + file.size ≤ quota`, sinon `422 STORAGE_QUOTA_EXCEEDED` avec
+  `{usedMb, limitMb, fileMb}`. La taille par fichier reste limitée par `MAX_UPLOAD_MB` (multer).
+- `GET /api/uploads/usage` renvoie `{usedBytes, usedMb, limitBytes, limitMb, percent, count, remainingBytes,
+  antivirus: {configured, engine}}` — affiché en temps réel sur la page Archives (remplace les valeurs
+  codées en dur « 2.4 GB / 10 GB »).
+- Les fichiers supprimés (soft delete) sortent immédiatement du calcul d'occupation.
+
+**Vérifications exécutées**
+
+| Cas | Résultat |
+| --- | --- |
+| `POST /api/uploads` avec un fichier EICAR (`text/csv`) | `422 UPLOAD_INFECTED`, signature `Eicar-Test-Signature`, aucune ligne créée |
+| PDF dont le contenu commence par `MZ` | `422`, signature `Win32.Executable` |
+| `GET /api/uploads/usage` | `200` avec quota de la formule (`limitMb > 0`), `engine: "builtin"` |
+| Tests unitaires moteur | 9 cas (EICAR, PE, ELF, macro VBA, PDF /Launch et /EmbeddedFile, fichiers propres, règles de quota) |
+
 ## 13. Limites connues avant une ouverture publique large
 
 - Chargily Pay est intégré et vérifié en mode test local (webhook signé + revérification) mais aucun
@@ -372,5 +408,6 @@ Tests unitaires TOTP : 7 cas dont les vecteurs RFC 6238 (`94287082`, `07081804`,
   sortie réseau) : la recette doit être refaite en staging avec une vraie clé `test_sk_…`.
 - Superadmin authentifié sur le tenant « platform » : la MFA est disponible (TOTP) mais son caractère
   obligatoire dépend de `MFA_REQUIRE_SUPERADMIN` ; la séparation réseau reste à faire.
-- Pas d'antivirus sur les uploads, pas de quota de stockage par formule.
+- Antivirus et quotas en place, mais ClamAV n'a pas été exercé contre un vrai démon dans cet
+  environnement (aucun binaire clamd) : la recette INSTREAM reste à faire en staging.
 - Limiteur de débit en mémoire (par instance) et outbox mono-worker.

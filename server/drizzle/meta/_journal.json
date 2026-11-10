@@ -36,6 +36,13 @@
       "when": 1794275203279,
       "tag": "0004_clumsy_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794276065082,
+      "tag": "0005_normal_havok",
+      "breakpoints": true
     }
   ]
 }

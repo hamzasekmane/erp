@@ -41,6 +41,15 @@ const schema = z.object({
   // Uploads
   UPLOAD_DIR: z.string().default("uploads"),
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).default(10),
+  // Antivirus (clamd INSTREAM) + stockage
+  CLAMAV_HOST: z.string().optional().default(""),
+  CLAMAV_PORT: z.coerce.number().int().min(1).max(65535).default(3310),
+  // true (défaut): refus de l'upload si clamd est configuré mais injoignable en production
+  AV_FAIL_CLOSED: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v !== "false"),
+  DEFAULT_STORAGE_QUOTA_MB: z.coerce.number().int().min(1).default(500),
   // Payments — Chargily Pay (Algeria: EDAHABIA / CIB)
   APP_PUBLIC_URL: z.string().optional().default(""),
   CHARGILY_MODE: z.enum(["test", "live"]).default("test"),

@@ -3,6 +3,9 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeTestApp, createTestApp } from "./app";
 import { totpCode } from "../shared/security/totp";
+import { sql } from "drizzle-orm";
+import { getDb } from "../db/client";
+import { plans } from "../db/schema";
 
 let app: INestApplication;
 let http: ReturnType<typeof request>;
@@ -347,6 +350,63 @@ describe("uploads", () => {
       .attach("file", Buffer.from("#!/bin/sh"), { filename: "run.sh", contentType: "application/x-sh" })
       .expect(400);
     expect(res.body.error_code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects files flagged by the antivirus engine", async () => {
+    const before = await http.get("/api/uploads").set("Authorization", `Bearer ${tokenA}`).expect(200);
+    const eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+    const res = await http
+      .post("/api/uploads")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .attach("file", Buffer.from(eicar, "utf8"), { filename: "facture.csv", contentType: "text/csv" })
+      .expect(422);
+    expect(res.body.error_code).toBe("UPLOAD_INFECTED");
+    expect(res.body.data.signature).toBe("Eicar-Test-Signature");
+
+    const after = await http.get("/api/uploads").set("Authorization", `Bearer ${tokenA}`).expect(200);
+    expect(after.body.pagination.total).toBe(before.body.pagination.total);
+  });
+
+  it("blocks a Windows executable renamed as a PDF", async () => {
+    const payload = Buffer.concat([Buffer.from("MZ"), Buffer.alloc(64, 0x90)]);
+    const res = await http
+      .post("/api/uploads")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .attach("file", payload, { filename: "devis.pdf", contentType: "application/pdf" })
+      .expect(422);
+    expect(res.body.data.signature).toBe("Win32.Executable");
+  });
+
+  it("reports storage usage against the plan quota", async () => {
+    const res = await http.get("/api/uploads/usage").set("Authorization", `Bearer ${tokenA}`).expect(200);
+    expect(res.body.data.limitBytes).toBeGreaterThan(0);
+    expect(res.body.data.limitMb).toBeGreaterThan(0);
+    expect(res.body.data.usedBytes).toBeGreaterThanOrEqual(0);
+    expect(res.body.data.antivirus.engine).toBe("builtin");
+    expect(res.body.data.percent).toBeGreaterThanOrEqual(0);
+  });
+
+  it("rejects an upload beyond the plan storage quota", async () => {
+    const db = getDb();
+    const original = await db.select({ code: plans.code, limits: plans.limits }).from(plans);
+    // every plan drops to 1 MB for the duration of the test
+    for (const plan of original) {
+      await db.execute(sql`update plans set limits = jsonb_set(limits, '{storageMb}', '1') where code = ${plan.code}`);
+    }
+    try {
+      const payload = Buffer.alloc(2 * 1024 * 1024, 0x41);
+      const res = await http
+        .post("/api/uploads")
+        .set("Authorization", `Bearer ${tokenA}`)
+        .attach("file", payload, { filename: "gros.pdf", contentType: "application/pdf" })
+        .expect(422);
+      expect(res.body.error_code).toBe("STORAGE_QUOTA_EXCEEDED");
+      expect(res.body.data.limitMb).toBe(1);
+    } finally {
+      for (const plan of original) {
+        await db.execute(sql`update plans set limits = ${JSON.stringify(plan.limits)}::jsonb where code = ${plan.code}`);
+      }
+    }
   });
 
   it("lists and deletes uploads", async () => {

@@ -215,6 +215,7 @@ register("get", "/admin/metrics", "Admin", "Métriques plateforme");
 register("get", "/uploads", "Fichiers", "Lister les fichiers du tenant", { query: pageQuery, response: listResponse(z.unknown()) });
 register("post", "/uploads", "Fichiers", "Téléverser un fichier (multipart/form-data, champ `file`)");
 register("post", "/uploads/logo", "Fichiers", "Définir le logo du tenant (multipart/form-data)");
+register("get", "/uploads/usage", "Fichiers", "Occupation du stockage et quota de la formule");
 register("get", "/uploads/:id", "Fichiers", "Télécharger un fichier", { params: idParams });
 register("delete", "/uploads/:id", "Fichiers", "Supprimer un fichier", { params: idParams });
 register("get", "/clients/import/template", "Import clients", "Modèle CSV d'import");
