@@ -20,6 +20,20 @@ const schema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(30),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   TRUST_PROXY: bool,
+  // Mail: without SMTP_URL, messages are written to MAIL_OUTBOX_DIR (dev only).
+  SMTP_URL: z.string().optional().default(""),
+  MAIL_FROM: z.string().default("ERP <no-reply@erp.local>"),
+  MAIL_OUTBOX_DIR: z.string().default(".data/mail"),
+  OUTBOX_INTERVAL_MS: z.coerce.number().int().min(0).default(5000),
+  OUTBOX_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
+  OUTBOX_DISABLED: bool,
+  // Uploads
+  UPLOAD_DIR: z.string().default("uploads"),
+  MAX_UPLOAD_MB: z.coerce.number().int().min(1).default(10),
+  // Scheduled maintenance
+  MAINTENANCE_INTERVAL_MS: z.coerce.number().int().min(0).default(6 * 60 * 60 * 1000),
+  MAINTENANCE_DISABLED: bool,
+  MAINTENANCE_TOKEN: z.string().optional().default(""),
 });
 
 const parsed = schema.safeParse(process.env);

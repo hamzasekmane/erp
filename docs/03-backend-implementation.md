@@ -21,7 +21,7 @@
 | Pilotage | dashboard (stats, quick-stats, graphiques, dernières factures/paiements, stock bas), rapports ventes/paiements/clients/produits/balance âgée + export CSV |
 | Modules complémentaires | notifications (+diffusion, nettoyage), clés API (création/révocation/rotation), admin plateforme (tenants, utilisateurs, métriques), RH (départements, employés, contrats, congés, pointage, paie), support (tickets + messages), archives (documents) |
 | Contrat | OpenAPI 3.1 généré depuis Zod (`docs/openapi.json`, 78 chemins), `/api/openapi.json`, `/api/docs` (Redoc) |
-| Tests | 19 tests e2e Vitest/supertest (auth, rotation de refresh, isolation tenant, RBAC, facture→paiement→remboursement, validation) |
+| Tests | 27 tests e2e Vitest/supertest (auth, rotation de refresh, isolation tenant, RBAC, facture→paiement→remboursement, validation, uploads, outbox, maintenance) |
 
 ## 2. Compatibilité avec le frontend
 
@@ -40,11 +40,22 @@
 | Politique mot de passe | 10 caractères | **8 caractères** + lettre + chiffre | les formulaires existants valident 6–8 |
 | Versionnage | `/api/v1` uniquement | `/api` + `/api/v1` | compatibilité avec l'URL configurée côté Next.js |
 
+## 3 bis. Itération « exploitation » (même phase)
+
+| Sujet | Détail |
+| --- | --- |
+| E-mails | `MailService` : SMTP via nodemailer si `SMTP_URL`, sinon dépôt JSON dans `.data/mail` (dev/test) |
+| Outbox | table `outbox_events` (`last_error` ajoutée), worker démarré avec l'API, réessais avec back-off (5 max), récupération des événements bloqués, `GET /admin/outbox/stats`, `POST /admin/outbox/process` |
+| Événements | `invoice.send`, `password.reset` (créé par mot de passe oublié), `user.invite` (créé par invitation superadmin), `email.generic` |
+| Fichiers | table `uploads` (migration `0002_platform.sql`), stockage local par tenant, `POST /uploads`, `POST /uploads/logo`, `GET|DELETE /uploads/:id`, liste paginée, contrôle MIME/extension et taille (`MAX_UPLOAD_MB`) |
+| Maintenance | factures `sent`/`partially_paid` échues → `overdue` (+ historique de statut), abonnements d'essai échus → `expired`, purge des sessions expirées (> 7 j) et jetons de réinitialisation ; planificateur interne + `POST /internal/maintenance/run` protégé par `x-maintenance-token` |
+| Audit | chaque upload/suppression et chaque passage de maintenance est journalisé |
+
 ## 4. Risques et points ouverts
 
 1. **Frontend corrompu** : plusieurs littéraux d'URL sont remplacés par `/n` (`clientGroupService`, `apiKeysActions`, `analytics.api`), les fichiers `analytics/*` importent `'.n.api'`. Le backend expose `/client-groups`, `/api-keys`, `/reports/*` ; ces écrans resteront cassés tant que le frontend n'est pas corrigé (cf. audit).
-2. **Emails** : aucun SMTP ; envoi de facture = événement outbox. Prévoir un worker.
-3. **Uploads** : logo tenant et pièces jointes archives attendent un stockage objet (S3/FS) + `FileInterceptor`.
+2. **E-mails** : la file et le worker sont opérationnels ; il reste à fournir un `SMTP_URL` réel (et un domaine vérifié) pour l'envoi effectif.
+3. **Uploads** : stockage local par tenant en place ; reste le stockage objet S3, la limite de quota par formule et l'analyse antivirus.
 4. **Paiements en ligne** : tables prêtes, aucune intégration PSP ni chiffrement des secrets (à faire avant activation).
 5. **PGlite en dev** : arrêter le serveur avec SIGTERM (déjà géré) ; un kill brutal peut corrompre `.data/pglite` (recréer via `db:seed`).
 6. **Superadmin** : authentifié sur un tenant « platform » ; une vraie séparation console plateforme reste à concevoir (MFA, IP allowlist).
@@ -56,14 +67,14 @@
 ```bash
 cd server
 npx tsc --noEmit         # 0 erreur
-npm test                 # 19/19
+npm test                 # 27/27
 npx tsx src/db/seed.ts   # migrations 0000+0001, plans, admin plateforme, tenant démo
 curl /api/health         # { status: "ok", database: "ok" }
 curl /api/invoices/:id/pdf  # PDF 200 (facture démo)
 npm run openapi          # 78 chemins
 ```
 
-Parcours manuels validés : inscription → login → `me` → client → produit → facture (remise/TVA/livraison) → paiement partiel → refus de surpaiement → remboursement → dashboard/rapports → import CSV → RH/paie → support → archives → clés API → OpenAPI.
+Parcours manuels validés : inscription → login → `me` → client → produit → facture (remise/TVA/livraison) → paiement partiel → refus de surpaiement → remboursement → dashboard/rapports → import CSV → RH/paie → support → archives → clés API → OpenAPI → upload/téléchargement de fichier → logo tenant → mot de passe oublié livré dans `.data/mail` → exécution de la maintenance.
 
 ## 6. Suite proposée (phase 4)
 

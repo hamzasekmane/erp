@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
-import { invoices, plans, subscriptions, tenantSettings, tenants, users } from "../../db/schema";
+import { invoices, outboxEvents, plans, subscriptions, tenantSettings, tenants, users } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
@@ -187,7 +187,7 @@ export class AdminService {
     return rows.map((user) => ({ _id: user.id, id: user.id, name: user.name, email: user.email, role: user.role, status: user.status, createdAt: user.createdAt.toISOString() }));
   }
 
-  async inviteUser(ctx: Ctx, tenantId: string, input: { name: string; email: string; role?: string; password?: string }) {
+  async inviteUser(ctx: Ctx, tenantId: string, input: { name: string; email: string; role?: string; password?: string; tenantName?: string }) {
     this.assertSuperadmin(ctx);
     const db = getDb();
     const email = input.email.toLowerCase();
@@ -207,6 +207,13 @@ export class AdminService {
       passwordHash: hashPassword(password),
       role: input.role ?? "user",
       status: "active",
+    });
+    await db.insert(outboxEvents).values({
+      id: newId(),
+      tenantId,
+      type: "user.invite",
+      payload: { to: email, tenantName: input.tenantName ?? null, invitedBy: ctx.userId },
+      status: "pending",
     });
     await audit({ tenantId, actorId: ctx.userId, action: "admin.user_invited", entity: "user", entityId: id, ip: ctx.ip, userAgent: ctx.userAgent });
     return { _id: id, id, email, tempPassword: input.password ? undefined : password };

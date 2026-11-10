@@ -17,6 +17,7 @@ Contrat OpenAPI : [`../docs/openapi.json`](../docs/openapi.json) (ou `GET /api/o
 | Auth | JWT HS256 (`jose`) + refresh opaque haché SHA-256, rotation par famille |
 | Mots de passe | scrypt (N=16384, r=8, p=1) |
 | PDF | pdfkit |
+| E-mails | nodemailer (SMTP) ou dépôt fichier en dev (`MAIL_OUTBOX_DIR`) |
 | Tests | Vitest + `@nestjs/testing` + supertest |
 
 ## Démarrage
@@ -26,7 +27,7 @@ npm install
 cp .env.example .env          # optionnel en dev : PGlite est utilisé sans DATABASE_URL
 npm run db:seed               # migrations + plans + admin plateforme + tenant démo
 npm run dev                   # http://localhost:4000/api  (alias /api/v1)
-npm test                      # 19 tests e2e (PGlite isolé par run)
+npm test                      # 27 tests e2e (PGlite isolé par run)
 ```
 
 Comptes créés par `db:seed` (surchargeables via `SEED_*` dans l'environnement) :
@@ -61,6 +62,22 @@ Comptes créés par `db:seed` (surchargeables via `SEED_*` dans l'environnement)
 - Multi-tenant : chaque requête authentifiée porte un `tenant_id` issu du JWT ; toutes les requêtes filtrent dessus.
 - Exceptions volontaires au format enveloppe (consommées telles quelles par le frontend) : `POST /auth/login|register`, `GET /clients/check-*`, `GET /client-groups*`, `GET /subscriptions/*`, `GET /payments/settings/*`.
 
+## Traitement asynchrone
+
+| Élément | Comportement |
+| --- | --- |
+| File | table `outbox_events` alimentée dans la transaction métier (`invoice.send`, `password.reset`, `user.invite`, `email.generic`) |
+| Worker | démarre avec l'API, traite les événements dus toutes les `OUTBOX_INTERVAL_MS`, réessaie avec back-off (5 tentatives max), récupère les événements bloqués en `processing` |
+| Observation | `GET /api/admin/outbox/stats`, `POST /api/admin/outbox/process` (superadmin), colonne `last_error` |
+| Maintenance | `POST /api/admin/maintenance/run` ou `POST /api/internal/maintenance/run` (en-tête `x-maintenance-token`) : factures échues → `overdue`, abonnements expirés, purge des sessions et jetons de réinitialisation |
+
+## Fichiers
+
+- `POST /api/uploads` (multipart `file`, `kind=document|attachment|import`) — types autorisés : PNG, JPEG, WebP, PDF, CSV, XLS/XLSX ; taille limitée par `MAX_UPLOAD_MB`.
+- `POST /api/uploads/logo` — téléverse et met à jour `tenants.logo_url`.
+- `GET /api/uploads/:id` — flux protégé par le tenant, en-têtes `Content-Type`/`Content-Length`/`Content-Disposition`.
+- `DELETE /api/uploads/:id` — suppression logique + fichier.
+
 ## Structure
 
 ```
@@ -73,7 +90,7 @@ src/
     auth  tenancy(+subscriptions)  users  admin  clients(+import)
     catalog  invoices  payments  dashboard  reports
     client-groups  client-notes  notifications  api-keys
-    hr  support  archives  health  docs
+    hr  support  archives  uploads  outbox  maintenance  health  docs
   openapi/                 registre Zod → OpenAPI 3.1
   test/                    application de test + suite e2e
 ```
@@ -89,7 +106,7 @@ src/
 
 ## Limites connues (voir docs/03 §Risques)
 
-- Aucun fournisseur SMTP → `POST /invoices/:id/send` met un événement en file (`outbox_events`) et retourne `delivery: "queued"`.
-- Upload de fichiers (logo tenant, pièces jointes) non implémenté : `archives` enregistre des métadonnées + URL.
+- E-mails : sans `SMTP_URL`, les messages sont écrits dans `.data/mail` (jamais envoyés) ; le worker de la file d'événements les livre dès qu'un SMTP est configuré.
+- Fichiers : stockage local (`UPLOAD_DIR`), pas encore de stockage objet S3 ni d'antivirus.
 - Paiements en ligne : tables `payment_gateways` et secrets prêts, aucune intégration PSP.
 - Sous-domaines par tenant : non routés, le tenant est porté par le JWT.

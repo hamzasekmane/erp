@@ -15,6 +15,13 @@
       "when": 1794268069462,
       "tag": "0001_ops",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794268735329,
+      "tag": "0002_platform",
+      "breakpoints": true
     }
   ]
 }

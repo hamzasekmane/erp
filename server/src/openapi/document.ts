@@ -186,6 +186,20 @@ register("delete", "/api-keys/:id", "API Keys", "Révoquer une clé API", { para
 register("get", "/admin/tenants", "Admin", "Lister les espaces de travail", { query: pageQuery, response: listResponse(z.unknown()) });
 register("post", "/admin/tenants", "Admin", "Créer un espace de travail");
 register("get", "/admin/metrics", "Admin", "Métriques plateforme");
+register("get", "/uploads", "Fichiers", "Lister les fichiers du tenant", { query: pageQuery, response: listResponse(z.unknown()) });
+register("post", "/uploads", "Fichiers", "Téléverser un fichier (multipart/form-data, champ `file`)");
+register("post", "/uploads/logo", "Fichiers", "Définir le logo du tenant (multipart/form-data)");
+register("get", "/uploads/:id", "Fichiers", "Télécharger un fichier", { params: idParams });
+register("delete", "/uploads/:id", "Fichiers", "Supprimer un fichier", { params: idParams });
+register("get", "/clients/import/template", "Import clients", "Modèle CSV d'import");
+register("post", "/clients/import/validate", "Import clients", "Valider un fichier CSV (multipart/form-data)");
+register("post", "/clients/import", "Import clients", "Importer des clients depuis un CSV (multipart/form-data)");
+register("get", "/clients/import/history", "Import clients", "Historique des imports", { query: pageQuery });
+register("get", "/admin/outbox/stats", "Exploitation", "Statistiques de la file d'événements");
+register("post", "/admin/outbox/process", "Exploitation", "Traiter la file d'événements (e-mails)");
+register("post", "/admin/maintenance/run", "Exploitation", "Lancer les tâches de maintenance");
+register("get", "/admin/maintenance/status", "Exploitation", "Dernière exécution de maintenance");
+register("post", "/internal/maintenance/run", "Exploitation", "Point d'entrée cron (en-tête x-maintenance-token)", { security: false });
 
 export function buildOpenApiDocument(baseUrl = "http://localhost:4000") {
   const generator = new OpenApiGeneratorV31(registry.definitions);

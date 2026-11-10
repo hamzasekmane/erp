@@ -768,6 +768,7 @@ export const outboxEvents = pgTable(
     payload: jsonb("payload").notNull(),
     status: text("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
     availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
     createdAt: createdAt(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
@@ -989,4 +990,24 @@ export const archiveDocuments = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => [index("archive_documents_tenant_idx").on(t.tenantId, t.category, t.createdAt)],
+);
+
+export const uploads = pgTable(
+  "uploads",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull().default("document"),
+    filename: text("filename").notNull(),
+    mime: text("mime").notNull(),
+    size: integer("size").notNull(),
+    storagePath: text("storage_path").notNull(),
+    uploadedBy: text("uploaded_by").references(() => users.id),
+    createdAt: createdAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => [
+    index("uploads_tenant_created_idx").on(t.tenantId, t.createdAt),
+    check("uploads_kind_chk", sql`${t.kind} in ('logo','document','attachment','import')`),
+  ],
 );

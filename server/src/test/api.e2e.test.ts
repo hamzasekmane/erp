@@ -205,3 +205,116 @@ describe("clients, invoices and payments", () => {
     expect(Array.isArray(res.body.errors)).toBe(true);
   });
 });
+
+describe("uploads", () => {
+  let tokenA = "";
+  let tokenB = "";
+  let uploadId = "";
+
+  beforeAll(async () => {
+    const a = await http.post("/api/auth/login").send({ email: tenantA.userData.email, password: tenantA.userData.password });
+    tokenA = a.body.token;
+    const b = await http.post("/api/auth/login").send({ email: tenantB.userData.email, password: tenantB.userData.password });
+    tokenB = b.body.token;
+  });
+
+  it("stores an allowed file and returns a URL", async () => {
+    const res = await http
+      .post("/api/uploads")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .field("kind", "document")
+      .attach("file", Buffer.from("%PDF-1.4 test"), { filename: "contrat.pdf", contentType: "application/pdf" })
+      .expect(201);
+    uploadId = res.body.data.id;
+    expect(res.body.data.mime).toBe("application/pdf");
+    expect(res.body.data.url).toBe(`/api/uploads/${uploadId}`);
+  });
+
+  it("streams the file back to its tenant", async () => {
+    const res = await http.get(`/api/uploads/${uploadId}`).set("Authorization", `Bearer ${tokenA}`).expect(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    expect(res.body.toString()).toContain("%PDF-1.4");
+  });
+
+  it("hides files from other tenants", async () => {
+    await http.get(`/api/uploads/${uploadId}`).set("Authorization", `Bearer ${tokenB}`).expect(404);
+  });
+
+  it("rejects unsupported mime types", async () => {
+    const res = await http
+      .post("/api/uploads")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .attach("file", Buffer.from("#!/bin/sh"), { filename: "run.sh", contentType: "application/x-sh" })
+      .expect(400);
+    expect(res.body.error_code).toBe("VALIDATION_ERROR");
+  });
+
+  it("lists and deletes uploads", async () => {
+    const list = await http.get("/api/uploads").set("Authorization", `Bearer ${tokenA}`).expect(200);
+    expect(list.body.pagination.total).toBeGreaterThanOrEqual(1);
+    await http.delete(`/api/uploads/${uploadId}`).set("Authorization", `Bearer ${tokenA}`).expect(200);
+    await http.get(`/api/uploads/${uploadId}`).set("Authorization", `Bearer ${tokenA}`).expect(404);
+  });
+});
+
+describe("outbox", () => {
+  it("queues an invoice email and delivers it through the worker", async () => {
+    const login = await http.post("/api/auth/login").send({ email: tenantA.userData.email, password: tenantA.userData.password });
+    const token = login.body.token;
+    const clients = await http.get("/api/clients").set("Authorization", `Bearer ${token}`);
+    const clientId = clients.body.data[0]._id;
+    const invoice = await http
+      .post("/api/invoices")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ clientId, dueDate: "2099-12-31", items: [{ description: "Envoi", quantity: 1, unitPrice: 50, taxRate: 19 }] })
+      .expect(201);
+
+    await http.post(`/api/invoices/${invoice.body.data._id}/send`).set("Authorization", `Bearer ${token}`).send({ email: "client@alpha.dz" }).expect(200);
+
+    const { OutboxService } = await import("../modules/outbox/outbox.service");
+    const outbox = app.get(OutboxService);
+    const result = await outbox.processPending();
+    expect(result.processed).toBeGreaterThanOrEqual(1);
+
+    const { env } = await import("../config/env");
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const files = readdirSync(env.MAIL_OUTBOX_DIR);
+    const contents = files.map((file) => readFileSync(`${env.MAIL_OUTBOX_DIR}/${file}`, "utf8")).join("\n");
+    expect(contents).toContain("client@alpha.dz");
+
+    const stats = await outbox.stats();
+    expect(stats.byStatus.processed).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("maintenance", () => {
+  it("marks past-due invoices as overdue", async () => {
+    const login = await http.post("/api/auth/login").send({ email: tenantA.userData.email, password: tenantA.userData.password });
+    const token = login.body.token;
+    const clients = await http.get("/api/clients").set("Authorization", `Bearer ${token}`);
+    const clientId = clients.body.data[0]._id;
+    const invoice = await http
+      .post("/api/invoices")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ clientId, dueDate: "2099-06-30", items: [{ description: "Retard", quantity: 1, unitPrice: 30, taxRate: 0 }] })
+      .expect(201);
+
+    const { getDb } = await import("../db/client");
+    const { invoices } = await import("../db/schema");
+    const { eq } = await import("drizzle-orm");
+    await getDb().update(invoices).set({ dueDate: "2020-01-31" }).where(eq(invoices.id, invoice.body.data._id));
+
+    const { MaintenanceService } = await import("../modules/maintenance/maintenance.service");
+    const report = await app.get(MaintenanceService).runAll();
+    expect(report.invoicesMarkedOverdue).toBeGreaterThanOrEqual(1);
+
+    const refreshed = await http.get(`/api/invoices/${invoice.body.data._id}`).set("Authorization", `Bearer ${token}`).expect(200);
+    expect(refreshed.body.data.status).toBe("overdue");
+  });
+
+  it("protects the cron entry point with a shared token", async () => {
+    await http.post("/api/internal/maintenance/run").expect(401);
+    const res = await http.post("/api/internal/maintenance/run").set("x-maintenance-token", "test-maintenance-token").expect(201);
+    expect(res.body.success).toBe(true);
+  });
+});

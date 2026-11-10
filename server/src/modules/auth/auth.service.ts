@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import {
+  outboxEvents,
   passwordResetTokens,
   paymentMethods,
   plans,
@@ -291,9 +292,16 @@ export class AuthService {
       tokenHash: hash,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
     });
+    await db.insert(outboxEvents).values({
+      id: newId(),
+      tenantId: user.tenantId,
+      type: "password.reset",
+      payload: { to: user.email, token, name: user.name },
+      status: "pending",
+    });
     await audit({ tenantId: user.tenantId, actorId: user.id, action: "auth.password_reset_requested", entity: "user", entityId: user.id, ...meta });
 
-    // No SMTP provider configured yet: surface the link in logs for local/dev flows.
+    // The outbox worker delivers the email; the link is also logged for local/dev flows.
     this.logger.log(`Password reset link: ${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${token}`);
     return { success: true, message: "Si cet email existe, un lien de réinitialisation a été envoyé." };
   }
