@@ -1,6 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { resetRegistrations } from "./db-cleanup";
 import { closeTestApp, createTestApp } from "./app";
 import { totpCode } from "../shared/security/totp";
 import { sql } from "drizzle-orm";
@@ -24,6 +25,8 @@ const tenantB = {
 
 beforeAll(async () => {
   app = await createTestApp();
+  // After createTestApp(): the database handle does not exist before initDb().
+  await resetRegistrations(["admin@alpha.dz", "admin@beta.dz", "admin@gamma.dz"]);
   http = request(app.getHttpServer());
 });
 

@@ -1,6 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { resetRegistrations } from "./db-cleanup";
 import { closeTestApp, createTestApp } from "./app";
 
 /**
@@ -36,6 +37,8 @@ let draftA = "";
 
 beforeAll(async () => {
   app = await createTestApp();
+  // After createTestApp(): the database handle does not exist before initDb().
+  await resetRegistrations(["admin@pubalpha.dz", "admin@pubbeta.dz"]);
   http = request(app.getHttpServer());
 
   const a = await http.post("/api/auth/register").send(tenantA).expect(201);
