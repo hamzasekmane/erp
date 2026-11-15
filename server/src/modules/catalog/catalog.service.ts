@@ -244,7 +244,7 @@ export class CatalogService {
     const [row] = await db
       .select({
         totalProducts: sql<number>`count(*)::int`,
-        totalStockValue: sql<number>`coalesce(sum(coalesce(${stockLevels.quantity}, 0) * ${products.priceMinor}), 0)::bigint`,
+        totalStockValue: sql<number>`coalesce(sum(coalesce(${stockLevels.quantity}, 0) * ${products.costMinor}), 0)::bigint`,
         lowStockCount: sql<number>`coalesce(sum(case when coalesce(${stockLevels.quantity}, 0) <= ${products.minStock} then 1 else 0 end), 0)::int`,
         outOfStockCount: sql<number>`coalesce(sum(case when coalesce(${stockLevels.quantity}, 0) <= 0 then 1 else 0 end), 0)::int`,
       })
@@ -393,22 +393,76 @@ export class CatalogService {
 
   private async applyStock(ctx: Ctx, productId: string, input: StockMovementInput) {
     const db = getDb();
+    const delta =
+      input.type === "in" ? input.quantity : input.type === "out" ? -input.quantity : 0;
+
     await db.transaction(async (tx) => {
-      const [level] = await tx.select().from(stockLevels).where(eq(stockLevels.productId, productId)).limit(1);
-      const current = Number(level?.quantity ?? 0);
-      const next = input.type === "adjustment" ? input.quantity : input.type === "in" ? current + input.quantity : current - input.quantity;
-      if (next < 0) throw AppError.unprocessable("INSUFFICIENT_STOCK", "Stock insuffisant pour cette opération.", { current });
-      if (level) {
-        await tx.update(stockLevels).set({ quantity: String(next), updatedAt: new Date() }).where(eq(stockLevels.productId, productId));
+      if (input.type === "adjustment") {
+        // `adjustment` sets an absolute level. The CHECK below rejects a
+        // negative target instead of allowing stock to go below zero.
+        const updated = await tx
+          .update(stockLevels)
+          .set({ quantity: String(input.quantity), updatedAt: new Date() })
+          .where(and(eq(stockLevels.productId, productId), eq(stockLevels.tenantId, ctx.tenantId)))
+          .returning({ productId: stockLevels.productId });
+        if (updated.length === 0) {
+          await tx.insert(stockLevels).values({
+            productId,
+            tenantId: ctx.tenantId,
+            quantity: String(input.quantity),
+          });
+        }
+      } else if (delta < 0) {
+        // Atomic decrement with a non-negative guard. The guard is evaluated by
+        // the database against the *current* value, so it cannot be bypassed by
+        // a concurrent transaction the way a read-compute-write sequence can.
+        const updated = await tx
+          .update(stockLevels)
+          .set({ quantity: sql`${stockLevels.quantity} + ${String(delta)}`, updatedAt: new Date() })
+          .where(
+            and(
+              eq(stockLevels.productId, productId),
+              eq(stockLevels.tenantId, ctx.tenantId),
+              sql`${stockLevels.quantity} + ${String(delta)} >= 0`,
+            ),
+          )
+          .returning({ quantity: stockLevels.quantity });
+
+        if (updated.length === 0) {
+          const [level] = await tx
+            .select({ quantity: stockLevels.quantity })
+            .from(stockLevels)
+            .where(and(eq(stockLevels.productId, productId), eq(stockLevels.tenantId, ctx.tenantId)))
+            .limit(1);
+          throw AppError.unprocessable("INSUFFICIENT_STOCK", "Stock insuffisant pour cette opération.", {
+            current: Number(level?.quantity ?? 0),
+          });
+        }
       } else {
-        await tx.insert(stockLevels).values({ productId, tenantId: ctx.tenantId, quantity: String(next) });
+        // Atomic increment; create the level row on first movement.
+        const updated = await tx
+          .update(stockLevels)
+          .set({ quantity: sql`${stockLevels.quantity} + ${String(delta)}`, updatedAt: new Date() })
+          .where(and(eq(stockLevels.productId, productId), eq(stockLevels.tenantId, ctx.tenantId)))
+          .returning({ quantity: stockLevels.quantity });
+
+        if (updated.length === 0) {
+          await tx.insert(stockLevels).values({
+            productId,
+            tenantId: ctx.tenantId,
+            quantity: String(delta),
+          });
+        }
       }
+
       await tx.insert(stockMovements).values({
         id: newId(),
         tenantId: ctx.tenantId,
         productId,
         type: input.type,
-        quantity: String(input.quantity),
+        // The movement records the signed effect so history reconciles with
+        // the level changes it caused.
+        quantity: String(input.type === "out" ? -Math.abs(input.quantity) : input.quantity),
         unitCostMinor: toMinor(input.unitCost ?? 0),
         reason: input.reason ?? null,
         createdBy: ctx.userId,

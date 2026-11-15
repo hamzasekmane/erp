@@ -432,7 +432,11 @@ export const stockLevels = pgTable(
     quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull().default("0"),
     updatedAt: updatedAt(),
   },
-  (t) => [index("stock_levels_tenant_idx").on(t.tenantId)],
+  (t) => [
+    index("stock_levels_tenant_idx").on(t.tenantId),
+    // Stock can never go negative; enforced by the DB, not just the service.
+    check("stock_levels_quantity_chk", sql`${t.quantity} >= 0`),
+  ],
 );
 
 export const stockMovements = pgTable(

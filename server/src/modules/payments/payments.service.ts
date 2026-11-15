@@ -143,6 +143,8 @@ export class PaymentsService {
     const amountMinor = toMinor(input.amount);
     if (amountMinor <= 0) throw AppError.badRequest("Le montant doit être supérieur à zéro");
 
+    // Read for the cheap precondition checks only. The authoritative check is
+    // the row lock taken inside the transaction below.
     const [invoice] = await db
       .select()
       .from(invoices)
@@ -164,11 +166,44 @@ export class PaymentsService {
     const paymentId = newId();
     let number = await documentNumber(ctx.tenantId, "payment", "PAY");
     const paidAt = input.paidAt ? new Date(input.paidAt) : new Date();
-    const nextPaid = Number(invoice.paidMinor) + amountMinor;
-    const nextDue = Number(invoice.totalMinor) - nextPaid;
-    const nextStatus = nextDue <= 0 ? "paid" : "partially_paid";
 
     const writePayment = async () => db.transaction(async (tx) => {
+      // Lock the invoice row for the duration of the transaction so concurrent
+      // settlements serialise. Re-reading under the lock is what makes the
+      // overpayment check correct: the value observed before the lock may be
+      // stale. Without this, two parallel payments both validated against the
+      // same balance and the second write overwrote the first (lost update).
+      const locked = (await tx.execute(
+        sql`select id, status, total_minor, paid_minor, due_minor
+              from invoices
+             where id = ${invoice.id} and tenant_id = ${ctx.tenantId}
+             for update`,
+      )) as unknown as { rows?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
+      const lockedRows = Array.isArray(locked) ? locked : (locked.rows ?? []);
+      const current = lockedRows[0];
+      if (!current) throw AppError.notFound("Facture introuvable");
+
+      const currentPaid = Number(current.paid_minor);
+      const currentTotal = Number(current.total_minor);
+      const currentDue = Number(current.due_minor);
+      const currentStatus = String(current.status);
+
+      if (currentStatus === "cancelled") throw AppError.unprocessable("INVOICE_CANCELLED", "Cette facture est annulée.");
+      if (currentStatus === "draft") throw AppError.unprocessable("INVOICE_DRAFT", "Émettez la facture avant d'enregistrer un paiement.");
+      if (currentDue <= 0 || currentStatus === "paid") {
+        throw AppError.unprocessable("INVOICE_ALREADY_PAID", "Cette facture est déjà soldée.");
+      }
+      if (amountMinor > currentDue) {
+        throw AppError.unprocessable("PAYMENT_EXCEEDS_DUE", "Le montant dépasse le solde restant dû.", {
+          due: fromMinor(currentDue),
+          maxPayable: fromMinor(currentDue),
+        });
+      }
+
+      const nextPaid = currentPaid + amountMinor;
+      const nextDue = currentTotal - nextPaid;
+      const nextStatus = nextDue <= 0 ? "paid" : "partially_paid";
+
       await tx.insert(payments).values({
         id: paymentId,
         tenantId: ctx.tenantId,
@@ -190,14 +225,20 @@ export class PaymentsService {
         invoiceId: invoice.id,
         amountMinor,
       });
-      await tx
+      // Conditional on the balance we just read: even if the lock were ever
+      // bypassed, this update cannot apply a stale absolute value.
+      const settled = await tx
         .update(invoices)
         .set({ paidMinor: nextPaid, dueMinor: nextDue, status: nextStatus, updatedAt: new Date() })
-        .where(eq(invoices.id, invoice.id));
+        .where(and(eq(invoices.id, invoice.id), eq(invoices.paidMinor, currentPaid)))
+        .returning({ id: invoices.id });
+      if (settled.length === 0) {
+        throw AppError.conflict("CONCURRENT_MODIFICATION", "La facture a été modifiée entre-temps, réessayez.");
+      }
       await tx.insert(invoiceStatusHistory).values({
         id: newId(),
         invoiceId: invoice.id,
-        fromStatus: invoice.status,
+        fromStatus: currentStatus,
         toStatus: nextStatus,
         actorId: ctx.userId,
         reason: `Paiement ${number}`,

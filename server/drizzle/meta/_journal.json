@@ -43,6 +43,13 @@
       "when": 1794276065082,
       "tag": "0005_normal_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794763837321,
+      "tag": "0006_stock_guards",
+      "breakpoints": true
     }
   ]
 }

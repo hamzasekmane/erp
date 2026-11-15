@@ -23,9 +23,16 @@ export const updateProductStatusSchema = z.object({
 
 export const stockMovementSchema = z.object({
   type: z.enum(["in", "out", "adjustment"]),
-  quantity: z.number().finite(),
+  // A non-positive quantity would silently invert the movement (e.g. an `out`
+  // of -5 would credit stock), so it is rejected at the boundary.
+  quantity: z.number().finite().nonnegative(),
+  /** `adjustment` sets the absolute level, so it must be >= 0; enforced below. */
+
   unitCost: z.number().finite().nonnegative().optional(),
   reason: z.string().max(300).optional(),
+}).refine((value) => value.type === "adjustment" || value.quantity > 0, {
+  message: "La quantité doit être strictement positive pour une entrée ou une sortie",
+  path: ["quantity"],
 });
 
 export const createCategorySchema = z.object({
