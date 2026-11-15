@@ -92,6 +92,13 @@
       "when": 1794781881692,
       "tag": "0017_search_text_snapshot",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794781882692,
+      "tag": "0018_rls_registration",
+      "breakpoints": true
     }
   ]
 }

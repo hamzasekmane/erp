@@ -96,14 +96,27 @@ export class AuthService {
     const now = new Date();
     const currency = (input.tenantData.currency ?? "DZD").toUpperCase();
     const businessName = input.tenantData.businessName ?? input.tenantData.name;
-    const subdomain = await this.uniqueSubdomain(slugify(input.tenantData.domain ?? businessName));
+    const baseSubdomain = slugify(input.tenantData.domain ?? businessName);
     const trialEnd = new Date(now.getTime() + plan.trialDays * 24 * 60 * 60 * 1000);
 
     await db.transaction(async (tx) => {
-      await tx.insert(tenants).values({
+      // Registration writes rows for a tenant that does not exist yet, under a
+      // role that is NOSUPERUSER NOBYPASSRLS on tables with FORCE RLS — the
+      // configuration production uses. Without the context set, every INSERT is
+      // rejected ("new row violates row-level security policy") and signup is a
+      // 500. It is invisible on a superuser connection (PGlite, local dev),
+      // because a superuser bypasses RLS even under FORCE.
+      //
+      // The new tenant's own id is the correct scope for its first rows, and
+      // FORCE applies to the table owner too, so this must happen as the
+      // application role — a SECURITY DEFINER helper would NOT escape it.
+      // `is_local = true` keeps the setting inside this transaction, so no other
+      // request on the pooled connection inherits it.
+      await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+
+      await this.insertTenantWithFreeSubdomain(tx, baseSubdomain, {
         id: tenantId,
         name: businessName,
-        subdomain,
         email: input.tenantData.contact?.email ?? email,
         phone: input.tenantData.contact?.phone ?? null,
         address: input.tenantData.address?.street ?? null,
@@ -118,7 +131,13 @@ export class AuthService {
 
       await tx.insert(tenantSettings).values({ tenantId });
 
-      await tx.insert(users).values({
+      // A duplicate email is detected here rather than only by the pre-check
+      // above: that pre-check reads `users` through RLS, so under the
+      // application role it cannot see another tenant's user and returns "free"
+      // for an address that is already taken. `users_email_uq` is the authority;
+      // the insert fails, the whole registration transaction rolls back (no
+      // orphan tenant), and the caller still gets EMAIL_IN_USE rather than a 500.
+      await this.insertFirstUser(tx, {
         id: userId,
         tenantId,
         email,
@@ -381,19 +400,71 @@ export class AuthService {
   /* Helpers                                                             */
   /* ------------------------------------------------------------------ */
 
-  private async uniqueSubdomain(base: string): Promise<string> {
-    const db = getDb();
-    let candidate = base;
-    for (let i = 2; i < 100; i += 1) {
-      const [taken] = await db
-        .select({ id: tenants.id })
-        .from(tenants)
-        .where(sql`lower(${tenants.subdomain}) = ${candidate}`)
-        .limit(1);
-      if (!taken) return candidate;
-      candidate = `${base}-${i}`;
+  /**
+   * Inserts the tenant's first user, translating the unique-email violation into
+   * the same EMAIL_IN_USE error the pre-check raises.
+   *
+   * The pre-check cannot be trusted on its own: it reads `users` through RLS, and
+   * for a caller with no tenant context that SELECT returns nothing, so an
+   * address already registered on the platform looks available. The unique index
+   * is the only reliable authority — and it is reliable, because uniqueness there
+   * is platform-wide, exactly like the check.
+   */
+  private async insertFirstUser(
+    tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
+    values: typeof users.$inferInsert,
+  ): Promise<void> {
+    try {
+      await tx.insert(users).values(values);
+    } catch (error) {
+      const code = (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code;
+      if (code === "23505") throw AppError.conflict("EMAIL_IN_USE", "Cet email est déjà utilisé");
+      throw error;
     }
-    return `${base}-${Date.now().toString(36)}`;
+  }
+
+  /**
+   * Inserts the tenant row, allocating a free subdomain by retrying on the
+   * unique constraint.
+   *
+   * There is deliberately NO "is this taken?" SELECT. That check cannot work
+   * here: `tenants` is FORCE-RLS with a policy matching only the caller's own
+   * tenant, so as the application role the SELECT returns zero rows for every
+   * candidate and always answers "free" — the second registration then dies on
+   * `tenants_subdomain_uq`. (A SECURITY DEFINER function does not rescue it
+   * either: with FORCE they are subject to the policy for the table owner as
+   * well. Verified on PostgreSQL 16; a superuser connection such as PGlite hides
+   * both facts.)
+   *
+   * So the constraint is the arbiter. Each attempt runs in a SAVEPOINT, so a
+   * collision rolls back only that attempt instead of aborting the whole
+   * registration transaction.
+   */
+  private async insertTenantWithFreeSubdomain(
+    tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
+    base: string,
+    values: Omit<typeof tenants.$inferInsert, "subdomain">,
+  ): Promise<string> {
+    const candidates = [base, ...Array.from({ length: 20 }, (_, index) => `${base}-${index + 2}`)];
+    for (const candidate of candidates) {
+      const attempt = await tx
+        .transaction(async (savepoint) => {
+          await savepoint.insert(tenants).values({ ...values, subdomain: candidate });
+          return true;
+        })
+        .catch((error: unknown) => {
+          // 23505 = unique_violation. Anything else is a real failure.
+          const code = (error as { cause?: { code?: string }; code?: string }).cause?.code ?? (error as { code?: string }).code;
+          if (code === "23505") return false;
+          throw error;
+        });
+      if (attempt) return candidate;
+    }
+    // 21 attempts on one base name: fall back to a random suffix rather than
+    // failing a signup for a cosmetic reason.
+    const fallback = `${base}-${Date.now().toString(36)}`;
+    await tx.insert(tenants).values({ ...values, subdomain: fallback });
+    return fallback;
   }
 
   /* ------------------------------------------------------------------ */

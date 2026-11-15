@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
+import { resetTenants } from "./db-cleanup";
 import { closeDb, getDb, initDb, resolvePublicTokenScope, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -88,7 +89,7 @@ async function seed(): Promise<void> {
     const db = getDb();
     // Re-runnable against a shared server: the suite seeds fixed ids, and a
     // second run used to fail on tenants_pkey. Cascades to every row below.
-    await db.delete(schema.tenants).where(inArray(schema.tenants.id, [TENANT_A, TENANT_B]));
+    await resetTenants([TENANT_A, TENANT_B]);
     await db.insert(schema.tenants).values([
       { id: TENANT_A, name: "RLS A", subdomain: "rls-a", email: "a@rls.dz" },
       { id: TENANT_B, name: "RLS B", subdomain: "rls-b", email: "b@rls.dz" },
@@ -548,5 +549,66 @@ describe("RLS — boot-time effectiveness check", () => {
     const result = await assertRlsEffective();
     expect(result.enforced).toBe(false);
     expect(result.reason).toMatch(/superuser|BYPASSRLS/i);
+  });
+});
+
+/**
+ * Registration and platform-level auditing, exercised with the policies ACTIVE.
+ *
+ * The rest of this file proves isolation by reading other tenants' rows. These
+ * cases prove the opposite direction: that the writes which legitimately happen
+ * before a tenant scope exists still succeed. Both failed on a real
+ * non-superuser server and could not fail here, because the suite connects as a
+ * superuser — so each case switches to the application role explicitly.
+ */
+describe("RLS — registration and platform audit writes", () => {
+  it("lets the application role create its own first tenant", async () => {
+    const id = "rls-self-registered";
+    await resetTenants([id]);
+
+    // Exactly what AuthService.register does. `set_config` and `set local role`
+    // must both be INSIDE the transaction: as a statement outside one they are
+    // no-ops, which is precisely how a test like this passes without proving
+    // anything.
+    const created = await getDb().transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.tenant_id', ${id}, true)`);
+      await tx.execute(sql.raw("set local role erp_app"));
+      await tx.insert(schema.tenants).values({ id, name: "Self Registered", subdomain: "rls-self", email: "s@rls.dz" });
+      const [row] = await tx.select().from(schema.tenants).where(eq(schema.tenants.id, id));
+      return row;
+    });
+    expect(created?.id).toBe(id);
+
+    // The row is real, and another tenant still cannot see it.
+    const asOther = await runTenant(TENANT_A, async () =>
+      getDb().select().from(schema.tenants).where(eq(schema.tenants.id, id)),
+    );
+    expect(asOther).toHaveLength(0);
+
+    await resetTenants([id]);
+  });
+
+  it("lets the application role append a platform-level audit event", async () => {
+    // Events with no tenant (a failed login, an invalid public token) carry
+    // tenant_id = null. The isolation policy compares against a setting that is
+    // unset for those, so the row was rejected and security events were lost.
+    const id = "rls-audit-platform";
+    await runGlobal(async () => {
+      await getDb().delete(schema.auditLogs).where(eq(schema.auditLogs.id, id));
+    });
+
+    await getDb().transaction(async (tx) => {
+      await tx.execute(sql.raw("set local role erp_app"));
+      await tx.insert(schema.auditLogs).values({ id, action: "auth.login_failed", entity: "user" });
+    });
+
+    const [row] = await runGlobal(async () =>
+      getDb().select().from(schema.auditLogs).where(eq(schema.auditLogs.id, id)),
+    );
+    expect(row?.tenantId).toBeNull();
+
+    await runGlobal(async () => {
+      await getDb().delete(schema.auditLogs).where(eq(schema.auditLogs.id, id));
+    });
   });
 });
