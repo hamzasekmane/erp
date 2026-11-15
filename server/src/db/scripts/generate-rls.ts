@@ -89,7 +89,7 @@ const WAVES: Array<{ tag: string; direct: string[]; viaParent: Array<{ table: st
   },
   {
     // A wave must not edit 0007: it is already applied in every environment.
-    tag: "0012_rls_bom",
+    tag: "0013_rls_bom",
     direct: ["bom_lines"],
     viaParent: [],
   },
