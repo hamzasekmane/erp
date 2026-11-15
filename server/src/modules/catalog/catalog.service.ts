@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { categories, products, stockLevels, stockMovements, taxes } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
@@ -78,11 +79,10 @@ export class CatalogService {
       filters.push(sql`${products.categoryId} in (select id from categories where tenant_id = ${ctx.tenantId} and lower(name) = ${query.category.toLowerCase()})`);
     }
     if (query.status === "active" || query.status === "inactive") filters.push(eq(products.isActive, query.status === "active"));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${products.name}) like ${term}`, sql`lower(${products.code}) like ${term}`);
-      if (search) filters.push(search);
-    }
+    // Indexed, normalization-aware: `search_text` is maintained by a trigger and
+    // carries the Arabic folds, so "احمد" finds a product stored as "أحمد".
+    const search = buildSearchFilter(query.search, products.searchText);
+    if (search) filters.push(search);
     if (query.lowStock === "true") {
       filters.push(sql`coalesce(${stockLevels.quantity}, 0) <= ${products.minStock}`);
     }

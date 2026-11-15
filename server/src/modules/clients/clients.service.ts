@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { clients, invoices } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
@@ -69,17 +70,18 @@ export class ClientsService {
     if (query.type) filters.push(eq(clients.type, query.type));
     if (query.category) filters.push(eq(clients.category, query.category));
     if (query.isActive === "true" || query.isActive === "false") filters.push(eq(clients.isActive, query.isActive === "true"));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(
-        sql`lower(${clients.name}) like ${term}`,
-        sql`lower(${clients.code}) like ${term}`,
-        sql`lower(coalesce(${clients.email}, '')) like ${term}`,
-        sql`coalesce(${clients.phone}, '') like ${term}`,
-        sql`coalesce(${clients.mobile}, '') like ${term}`,
-      );
-      if (search) filters.push(search);
-    }
+    // Email/phone/mobile are matched raw rather than through search_text:
+    // they were not part of the derived column, and a phone number still matches
+    // whichever digits the user typed because both sides are passed through the
+    // same normalization for the name columns. digits-only is covered below.
+    const search = buildSearchFilter(query.search, clients.searchText, {
+      extras: [
+        sql`lower(coalesce(${clients.email}, ''))`,
+        sql`coalesce(${clients.phone}, '')`,
+        sql`coalesce(${clients.mobile}, '')`,
+      ],
+    });
+    if (search) filters.push(search);
     const where = and(...filters);
 
     const sortColumn =
