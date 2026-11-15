@@ -56,6 +56,8 @@ export const tenants = pgTable(
     name: text("name").notNull(),
     subdomain: text("subdomain").notNull(),
     email: text("email").notNull(),
+    /** Derived and index-backed; written by the tenants_search_text_trg trigger. */
+    searchText: searchText(),
     phone: text("phone"),
     address: text("address"),
     city: text("city"),
@@ -118,6 +120,8 @@ export const users = pgTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
+    /** Derived and index-backed; written by the users_search_text_trg trigger. */
+    searchText: searchText(),
     role: text("role").notNull().default("user"),
     status: text("status").notNull().default("active"),
     avatarUrl: text("avatar_url"),
@@ -351,6 +355,8 @@ export const clientNotes = pgTable(
       .references(() => clients.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     content: text("content").notNull().default(""),
+    /** Derived and index-backed; written by the client_notes_search_text_trg trigger. */
+    searchText: searchText(),
     category: text("category").notNull().default("general"),
     isPinned: boolean("is_pinned").notNull().default(false),
     createdBy: text("created_by"),
@@ -538,6 +544,8 @@ export const invoices = pgTable(
     id: id(),
     tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
     number: text("number").notNull(),
+    /** Derived and index-backed; written by the invoices_search_text_trg trigger. */
+    searchText: searchText(),
     clientId: text("client_id")
       .notNull()
       .references(() => clients.id),
@@ -637,6 +645,8 @@ export const payments = pgTable(
     id: id(),
     tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
     number: text("number").notNull(),
+    /** Derived and index-backed; written by the payments_search_text_trg trigger. */
+    searchText: searchText(),
     clientId: text("client_id").references(() => clients.id),
     invoiceId: text("invoice_id").references(() => invoices.id),
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
@@ -927,6 +937,8 @@ export const employees = pgTable(
     code: text("code").notNull(),
     firstName: text("first_name").notNull(),
     lastName: text("last_name").notNull(),
+    /** Derived and index-backed; written by the employees_search_text_trg trigger. */
+    searchText: searchText(),
     email: text("email"),
     phone: text("phone"),
     departmentId: text("department_id").references(() => departments.id),
@@ -1031,6 +1043,8 @@ export const supportTickets = pgTable(
     userId: text("user_id"),
     subject: text("subject").notNull(),
     description: text("description").notNull().default(""),
+    /** Derived and index-backed; written by the support_tickets_search_text_trg trigger. */
+    searchText: searchText(),
     category: text("category").notNull().default("other"),
     priority: text("priority").notNull().default("medium"),
     status: text("status").notNull().default("open"),
@@ -1071,6 +1085,8 @@ export const archiveDocuments = pgTable(
     name: text("name").notNull(),
     category: text("category").notNull().default("other"),
     description: text("description"),
+    /** Derived and index-backed; written by the archive_documents_search_text_trg trigger. */
+    searchText: searchText(),
     fileUrl: text("file_url"),
     mime: text("mime"),
     size: integer("size").notNull().default(0),

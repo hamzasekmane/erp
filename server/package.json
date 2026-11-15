@@ -16,7 +16,8 @@
     "db:generate-rls": "tsx src/db/scripts/generate-rls.ts",
     "bench:ledger": "tsx src/db/scripts/bench-ledger.ts",
     "bench:valuation": "tsx src/db/scripts/benchmark-valuation.ts",
-    "bench:search": "tsx src/db/scripts/benchmark-search.ts"
+    "bench:search": "tsx src/db/scripts/benchmark-search.ts",
+    "db:generate-search": "tsx src/db/scripts/generate-search.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",

@@ -1,0 +1,11 @@
+-- Intentionally empty.
+--
+-- The search_text columns are created by the hand-generated migrations
+-- 0014 and 0016, which drizzle-kit's snapshot chain cannot see. This migration
+-- exists only to carry the snapshot that records those columns, so that future
+-- `db:generate` runs do not emit them again.
+--
+-- The SQL this migration originally contained was a duplicate of 0016 and was
+-- removed. The guard that makes this class of mistake harmless — ADD COLUMN IF
+-- NOT EXISTS in 0016 — is in the generator, not here: an empty file is a
+-- deliberate record, not a substitute for idempotency.

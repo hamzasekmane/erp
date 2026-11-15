@@ -85,6 +85,13 @@
       "when": 1794779554510,
       "tag": "0011_swift_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794781881692,
+      "tag": "0017_search_text_snapshot",
+      "breakpoints": true
     }
   ]
 }
