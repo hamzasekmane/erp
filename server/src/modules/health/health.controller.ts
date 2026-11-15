@@ -1,4 +1,5 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, HttpStatus, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { sql } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { Public } from "../../shared/security/decorators";
@@ -12,10 +13,16 @@ export class HealthController {
     return { success: true, data: { status: "ok", uptime: Math.round(process.uptime()) } };
   }
 
-  /** Readiness: dependencies usable and no operational backlog. */
+  /**
+   * Readiness: dependencies usable and no operational backlog.
+   *
+   * The HTTP STATUS carries the verdict (503 when not ready) because that is
+   * what container orchestrators and load balancers read. Returning 200 with
+   * `success: false` in the body silently kept a broken instance in rotation.
+   */
   @Public()
   @Get("ready")
-  async ready() {
+  async ready(@Res({ passthrough: true }) res: Response) {
     const checks: Record<string, string> = {};
     try {
       await getDb().execute(sql`select 1`);
@@ -36,6 +43,7 @@ export class HealthController {
     }
 
     const ready = checks.database === "ok" && checks.outbox !== "lagging";
+    res.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
     return {
       success: ready,
       data: { status: ready ? "ready" : "not_ready", checks, pendingOutbox, uptime: Math.round(process.uptime()) },
@@ -44,13 +52,18 @@ export class HealthController {
 
   @Public()
   @Get()
-  async check() {
+  async check(@Res({ passthrough: true }) res: Response) {
     let database = "ok";
     try {
       await getDb().execute(sql`select 1`);
     } catch {
       database = "down";
     }
-    return { success: true, data: { status: database === "ok" ? "ok" : "degraded", database, uptime: Math.round(process.uptime()) } };
+    const healthy = database === "ok";
+    res.status(healthy ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
+    return {
+      success: healthy,
+      data: { status: healthy ? "ok" : "degraded", database, uptime: Math.round(process.uptime()) },
+    };
   }
 }
