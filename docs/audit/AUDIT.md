@@ -43,7 +43,7 @@ These are real assets and must not be thrown away in a refactor:
 
 | # | Blocking defect | Severity |
 | --- | --- | --- |
-| C1 | Invoice lines store `discount_bp` ×100 of what is computed — every discounted invoice persists wrong money | **Critical** |
+| C1 | ~~Invoice lines store `discount_bp` ×100~~ **RETRACTED — see Erratum E-1.** Actual Critical money defect is the VAT base (C1′) | **Critical** |
 | C2 | `docker compose up` cannot work: required `env_file` is absent (and ungitignore-exempted), so a clean clone fails | **Critical** |
 | C3 | Inventory stock levels are read-modify-write without row locking → lost updates and negative stock under concurrency | **Critical** |
 | H1 | Concurrent payments on one invoice: no optimistic lock → overpayment / corrupted `paid_minor` | High |
@@ -196,7 +196,7 @@ None detected between backend modules: every module imports only `shared/*`, `db
 
 | ID | Sev | Finding | Evidence |
 | --- | --- | --- | --- |
-| DB-1 | **Critical** | **Currency bug: `discount_bp` is multiplied by 100 before storage.** `computeLines` already computes the *minor-unit* discount correctly, but the persisted row writes `discountBp: Math.round(line.input.discount * 100)` where `input.discount` is already a percentage (0–100). A 10 % line discount is therefore stored as **1000 bp (10 %)**… and simultaneously the same value is used as a basis-point field elsewhere. Any consumer that reads `discount_bp` as basis points (the schema's stated convention, `schema.ts:24`) will apply **100× the intended discount**. Two code paths write it identically (`invoices.service.ts:329`, `:400`), so the bug is consistent and silent. | `schema.ts:516-538` (`discount_bp` documented as bp), `invoices.service.ts:65-80, 329, 400` |
+| DB-1 | — | ~~Currency bug: `discount_bp` stored at 100× scale.~~ **RETRACTED.** `Math.round(percent * 100)` is a *correct* percentage→basis-point conversion: `Math.round(12.5 * 100) === 1250` bp, and `serialize()` converts back with `Number(discountBp) / 100 === 12.5`. There is no scale defect. See Erratum E-1 for how I got this wrong and what replaced it. | `invoices.service.ts:329, 400`; `serialize()` div-by-100 |
 | DB-2 | **Critical** | **Lost updates on stock.** `applyStock` reads the level, computes `next` in JS, then writes the absolute value — no `SELECT ... FOR UPDATE`, no atomic `quantity = quantity + ?`, no version predicate. Two concurrent sales both read 5, both write 3, and stock is overstated by 2. The negative-stock check is also TOCTOU. | `catalog.service.ts:394-416` |
 | DB-3 | High | **Overpayment under concurrency.** `payments.create` reads the invoice, validates `amount <= due`, then updates `paid_minor` with `where(eq(invoices.id, ...))` — **no `AND paid_minor = <observed value>`** guard. Two simultaneous payments both pass validation and the second overwrites the first's accumulator. | `payments.service.ts:146-170, 196` |
 | DB-4 | High | **`shared/money.ts` is dead code and diverges from the live implementation.** The "documented" rounding contract (`lineTotalMinor`, `invoiceTotals`, rounding per line then summing) is not what the invoice service does. Two sources of truth for money = a guaranteed future defect. | `shared/money.ts:1-60` (no consumers), `invoices.service.ts:65-80` |
@@ -205,6 +205,7 @@ None detected between backend modules: every module imports only `shared/*`, `db
 | DB-7 | Medium | **`idempotency_keys` table is defined and never used.** Zero references outside `schema.ts`. All 40+ mutating endpoints are replay-unsafe. | `schema.ts:810-827`, `grep` → 0 |
 | DB-8 | Medium | **N+1 and write-on-read.** `list()` calls `markOverdue()` — an `UPDATE` — on *every* invoice listing (`invoices.service.ts:91, 131`), so a read endpoint takes write locks and is not cacheable. `payments.service.ts:431-436` awaits one `INSERT` per gateway secret inside a loop. | as cited |
 | DB-9 | Low | Money columns are `bigint` **in `mode: "number"`**, i.e. JS doubles above 2^53 lose precision. Fine for DZD amounts in practice, but it contradicts the "no floats" intent and should be `mode: "bigint"` or `numeric` for absolute safety. | `schema.ts:32` |
+| DB-1′ | **Critical** | **VAT was computed on the pre-discount subtotal.** The global invoice discount reduced `total_minor` but never `tax_minor`: the old code computed `taxMinor` from the line bases and then subtracted the global discount only from the total, so a 10 % invoice discount left the tax unchanged. Worked example (now a regression test): one line of 1000.00 at 19 % VAT with a 100.00 global discount produced `total = 900.00 + 190.00 = 1090.00` instead of `900.00 + 171.00 = 1071.00`, over-taxing by 19.00 per line. The discount must reduce the *taxable base*. | `invoices.service.ts` `computeInvoiceTotals`; pinned by `src/shared/money.test.ts` |
 | DB-10 | Low | `stockLevels.quantity` and `minStock` are `numeric(18,3)` but are read into JS `Number` and compared in SQL against product price for "stock value", mixing unit-cost semantics with sale price. | `catalog.service.ts:247-249` |
 | DB-11 | Low | Indexing is generally strong (composite, partial and functional indexes throughout). Gaps: `payments_tenant_status_idx` does not cover `invoice_id` lookups; `audit_logs` lacks a plain `(tenant_id, id)` for keyset pagination. | `schema.ts:594-600, 770-792` |
 
@@ -302,7 +303,7 @@ No automated a11y tooling. Manual signals are weak: 10 `aria-label`s across 240 
 
 | Severity | Count | IDs |
 | --- | --- | --- |
-| **Critical** | 3 | C1/DB-1, C2/OPS-1, C3/DB-2 |
+| **Critical** | 3 | C1′/DB-1′ (VAT base), C2/OPS-1 (compose), C3/DB-2 (stock) — C1/DB-1 retracted, see E-1 |
 | **High** | 12 | H1/DB-3, H2/DB-7, H3/OPS-2, H4/I18N-1..5, H5/SEC-6/7, H6/N-1/SEC-1, H7/DB-4, H8/F-1, N-3, TEN-1, OPS-3 |
 | **Medium** | 24 | S-1..S-3, N-4..N-7, SEC-2/3/6/8/9, CSRF-1, VAL-1, RATE-1, AUD-1, DB-5/6/8, OPS-4..6, PERF-1..4, I18N-1, F-2, F-3 |
 | **Low** | 17 | S-4..S-7, N-8, SEC-4/5, INJ-1/2, XSS-1, RATE-2, AUD-2, DB-9/10/11, OPS-7/8, PERF-5/6, F-4, F-5 |
@@ -317,7 +318,7 @@ Effort is engineering days for one senior engineer, including tests. Order is de
 
 | # | Task | Fixes | Effort |
 | --- | --- | --- | --- |
-| 0.1 | Correct `discount_bp` persistence, add a data-repair migration for existing rows, and add a DB check constraint `discount_bp between 0 and 10000` (already present) plus a regression test asserting stored bp == input % × 100 only once | C1/DB-1 | 1 d |
+| 0.1 | ~~Correct `discount_bp` persistence~~ **DONE, and the premise was wrong (E-1).** Instead: unify money arithmetic in `shared/money.ts` and make the global discount reduce the taxable VAT base. Inspection script added so real data can be checked before any migration. | C1′/DB-1′ | 1 d |
 | 0.2 | Make `applyStock` atomic: single conditional `UPDATE ... SET quantity = quantity + $delta WHERE ... AND quantity + $delta >= 0 RETURNING`, with 409 on zero rows; same for `stockLevels` upsert | C3/DB-2 | 0.75 d |
 | 0.3 | Optimistic concurrency on invoice settlement: `UPDATE invoices SET paid_minor = $new WHERE id = $id AND paid_minor = $observed`, retry ×3 then 409 `CONCURRENT_MODIFICATION` | H1/DB-3 | 0.5 d |
 | 0.4 | Fix the compose/CI breakage: commit `server/.env.production.example`, make compose use `env_file` with `required: false` + `.env` interpolation, create `public/.gitkeep` (or drop the `COPY`), add `healthcheck` to `api`/`web` | C2/OPS-1, H3/OPS-2, OPS-3 | 0.5 d |
@@ -375,7 +376,7 @@ Per the brief, Phase 1 is audit-only. Additionally I recommend **not** changing 
 ## 14. Assumptions made (explicit, per operating rule 5)
 
 1. **Docker could not be executed** in this audit sandbox (`docker: command not found`). C2/OPS-1, H3/OPS-2 and OPS-3 are derived from static inspection and are stated as such. I flag them as Critical/High because the failure mode is deterministic, but they are **unverified by execution** and must be confirmed by running `docker compose config` on a clean clone.
-2. **`discount_bp` interpretation (C1).** I read `input.discount` as a *percentage* (0–100) because `computeLines` divides by 100 and the DTO/UI pass percentage values; the schema documents basis points. Two readings are possible, and **either way there is a 100× inconsistency** between the computation and the stored column. Sprint 0.1 must settle the contract and add a test that pins it.
+2. **`discount_bp` interpretation.** Resolved: percentage in (0–100, max 2 decimals), integer basis points stored (0–10000), converted exactly once at the boundary. The original claim that this was a 100× defect was **wrong** — see Erratum E-1. The contract is now pinned by `src/shared/money.test.ts` and recorded in `docs/adr/0002-money-and-discount-contract.md`.
 3. Target market is **Algeria** (DZD, NIF/NIS/RC, Arabic+French, Africa/Algiers timezone), inferred from `tenantSettings.defaultVatBp = 1900`, `currency = "DZD"` and Chargily Pay. The i18n/RTL work is therefore scoped to `fr`+`ar`+, not `fr`+`en`.
 4. Effort estimates assume one senior engineer and exclude review time.
 
@@ -387,3 +388,115 @@ Per the brief, Phase 1 is audit-only. Additionally I recommend **not** changing 
 2. **`discount_bp` contract:** confirm percentage-in, basis-points-stored as the intended contract (assumption 2).
 3. **Multi-tenant isolation level:** is RLS required for compliance, or is application-level filtering acceptable for the target customers?
 4. **Locale set:** confirm `fr` + `ar` only, or add `en` (the stub exists)?
+
+---
+
+## 16. Errata
+
+### E-1 — Finding C1/DB-1 was wrong (retracted 2026-11-15)
+
+**What I claimed.** That `discount_bp` was persisted at 100× the intended
+scale, because `invoices.service.ts:329`/`:400` write
+`Math.round(line.input.discount * 100)` while "`input.discount` is a
+percentage".
+
+**Why it is wrong.** `input.discount` *is* a percentage, and multiplying a
+percentage by 100 to obtain basis points is exactly the agreed conversion:
+
+```text
+Math.round(12.5 * 100) === 1250        // 12.5 % -> 1250 bp  CORRECT
+Number(1250) / 100    === 12.5         // serialize() back   CORRECT
+```
+
+There was never a scale defect in either direction. I conflated "the constant
+100 appears next to a percentage" with a bug, and I phrased the finding so
+confidently that it reached the Critical list without me running the two-line
+arithmetic. **Lesson applied:** every money finding must now ship with an
+executed example, which is what `src/shared/money.test.ts` and
+`src/db/scripts/inspect-discounts.ts` provide.
+
+**What the real Critical defect was.** While verifying against the new
+contract I found C1′/DB-1′: the global invoice discount reduced the total but
+**never the VAT**, because tax was computed per line before the invoice-level
+discount was subtracted. That is a genuine fiscal error — it over-taxes every
+discounted invoice — and it is now fixed and pinned by tests.
+
+**Net effect on the audit.** The Critical count stays at 3, but one of them is
+a different defect than originally reported. C2/OPS-1 and C3/DB-2 are
+unchanged and both were independently confirmed during Phase 2.
+
+**Data check before assuming production data is dirty.** Per the agreed
+contract, no migration rewrote historical invoices. `npm run
+db:inspect-discounts` (in `server/`) recomputes every line from its stored
+basis points and reports rows that disagree; it exits non-zero when it finds
+suspect data. It was verified against both a correct row (1250 bp passes) and
+a deliberately wrong-scale row (10 bp is flagged).
+
+---
+
+## 17. Phase 2 — Sprint 0 progress log
+
+Scope fixed with the product owner: **Criticals only**, plus a minimal CI gate.
+RLS, idempotency, sessions, security headers and the ledger are explicitly
+**out of scope for this sprint** (see §17.1 for the agreed order).
+
+| Item | Status | Commit | Evidence |
+| --- | --- | --- | --- |
+| CI gate (typecheck/test/build/audit) | ✅ Done | `ci: gate typecheck, tests, build and runtime dependency audits` | 4 jobs; ESLint backlog non-blocking and reported |
+| (a) Money — VAT on net base, single implementation | ✅ Done | `fix(money): charge VAT on the net base and unify money arithmetic` | 24 money tests; e2e totals 229.20 → 228.25 |
+| (b) Payments — atomic balance update | ✅ Done | `fix(concurrency): serialise invoice settlement and make stock updates atomic` | `SELECT … FOR UPDATE` + conditional update; 7 concurrency tests |
+| (c) Stock — atomic quantity, value at cost | ✅ Done | same commit | atomic decrement with DB guard; migration `0006_stock_guards` verified to reject negative stock |
+| (d) Docker/compose | ✅ Done | `fix(devops): make docker compose up work from a clean clone` | optional `env_file`, `public/` added, healthchecks, `service_healthy` conditions |
+| (d) `/health/ready` returns 503 when the DB is down | ✅ Done | `fix(health): fail readiness with HTTP 503 when dependencies are down` | 5 health tests, failing-first |
+| (e) drizzle-orm ≥ 0.45.4 | ✅ Done | `fix(deps): upgrade drizzle-orm to 0.45.4` | API runtime audit now **0 vulnerabilities** |
+
+**Test count progression:** 61 → 85 → 92 → 97, all passing.
+
+### 17.1 Agreed sequencing for the next sprints
+
+Fixed with the product owner on 2026-11-15:
+
+1. **Sprint 1a — public invoice token fix.** Replace the unauthenticated
+   `GET /invoices/:id/view` (ID-only, non-revocable) with the existing
+   `invoice_public_tokens` table: hashed token, expiry, revocation.
+   *Must precede RLS*, because a tokenless public route cannot be expressed as
+   a tenant predicate.
+2. **Sprint 1b — Row-Level Security.** Enable + `FORCE ROW LEVEL SECURITY` on
+   tenant-scoped tables; the app connects as a non-owner role; `SET LOCAL
+   app.tenant_id` inside every transaction and **never** at session level on a
+   pooled connection; fail closed when the setting is absent. Roll out in
+   stages (invoices → payments → clients → rest) with a per-table cross-tenant
+   leak test. `PGlite` enforces policies, but the tests must demonstrate it
+   rather than assume it, and must not run as superuser.
+3. **Sprint 1c — Minimal ledger.** Chart of accounts as a cycle-safe closure
+   table, seeded per tenant from a replaceable Algerian SCF-compatible
+   template (no hardcoded accounts), immutable journal entries with debits =
+   credits enforced in both the DB and the domain, reversal entries instead of
+   deletes, automatic posting from invoices and payments *inside the same
+   transaction as the business write*, and a trial-balance report. Seams left
+   for manual journals and period locking (schema + interfaces only, no UI).
+   Property-based tests for the balance invariant; trial balance benchmarked
+   at 1M journal lines.
+
+### 17.2 Accepted deviations and known gaps from Sprint 0
+
+1. **Concurrency tests are regression guards, not failing-first proofs.**
+   PGlite (embedded, single-connection) serialises writes, so the parallel
+   HTTP tests in `concurrency.e2e.test.ts` also pass against the *pre-fix*
+   code. The races are prevented by construction (row lock + conditional
+   update + DB constraint), but they were not *reproduced red* in CI. Closing
+   this properly requires a real multi-connection PostgreSQL service in CI.
+2. **Docker was not executed.** It is not installed in this sandbox. Compose
+   and both workflows were validated by YAML parsing, and the image contents
+   by inspection. `docker compose up` on a clean clone remains **unverified by
+   execution** and should be the first thing checked in a real environment.
+3. **`xlsx` remains.** Still 1 high advisory in the web runtime tree, with no
+   patched release on npm. CI marks the web audit `continue-on-error` and the
+   inline comment records why. Remedy: move Excel export server-side.
+4. **Rounding-order change is a behavioural change.** Correcting the VAT base
+   changes totals for invoices that carry a global discount. No historical row
+   was rewritten. Existing issued invoices keep their stored totals; anything
+   re-issued will carry the corrected figure. This is called out for the
+   product owner as a reporting/fiscal decision, not silently absorbed.
+5. **ESLint backlog unchanged** (475 errors) as instructed; tracked and
+   reported in CI.
