@@ -56,6 +56,11 @@ const TENANT_TABLES = [
   "support_tickets",
   "archive_documents",
   "uploads",
+  "accounts",
+  "account_closure",
+  "journal_entries",
+  "journal_lines",
+  "accounting_periods",
 ] as const;
 
 const CHILD_TABLES = [
@@ -241,6 +246,47 @@ async function seed(): Promise<void> {
         employeeId: `emp-${suffix}`,
         date: "2099-01-01",
       });
+      await db.insert(schema.accounts).values({
+        id: `acc-${suffix}`,
+        tenantId,
+        code: `ACC-${suffix}`,
+        name: "Client",
+        type: "asset",
+        normalBalance: "debit",
+      });
+      await db.insert(schema.accountClosure).values({
+        tenantId,
+        ancestorId: `acc-${suffix}`,
+        descendantId: `acc-${suffix}`,
+        depth: 0,
+      });
+      await db.insert(schema.accountingPeriods).values({
+        id: `period-${suffix}`,
+        tenantId,
+        period: `2099-0${suffix === "a" ? 1 : 2}`,
+        startDate: "2099-01-01",
+        endDate: "2099-12-31",
+      });
+      await db.insert(schema.journalEntries).values({
+        id: `je-${suffix}`,
+        tenantId,
+        number: `JE-${suffix}`,
+        entryDate: "2099-01-01",
+        sourceType: "manual",
+        // Draft: a posted entry must be balanced, and these fixtures are
+        // inserted one statement at a time (each its own transaction), so the
+        // deferred balance trigger would correctly reject them.
+        status: "draft",
+      });
+      await db.insert(schema.journalLines).values({
+        id: `jl-${suffix}`,
+        tenantId,
+        entryId: `je-${suffix}`,
+        lineNumber: 1,
+        accountId: `acc-${suffix}`,
+        debitMinor: 100,
+        creditMinor: 0,
+      });
       await db.insert(schema.supportTickets).values({ id: `ticket-${suffix}`, tenantId, subject: "S" });
       await db.insert(schema.supportMessages).values({ id: `msg-${suffix}`, ticketId: `ticket-${suffix}`, body: "B" });
       await db.insert(schema.archiveDocuments).values({ id: `arch-${suffix}`, tenantId, name: "A" });
@@ -301,8 +347,10 @@ describe("RLS — the policy set is real and engaged", () => {
       rawRows(`select count(*)::int as n from pg_class c join pg_namespace ns on ns.oid = c.relnamespace
                where ns.nspname = 'public' and c.relrowsecurity and c.relforcerowsecurity`),
     );
-    // 33 direct + tenants + 9 child tables
-    expect(Number(rows[0]?.n)).toBe(43);
+    // Derived, not hardcoded: a table added without a policy must fail this,
+    // and a table added WITH one must not require editing a magic number.
+    // = tenant tables + tenants itself + child tables.
+    expect(Number(rows[0]?.n)).toBe(TENANT_TABLES.length + 1 + CHILD_TABLES.length);
   });
 
   it("creates the app role as non-superuser and non-bypassrls", async () => {
