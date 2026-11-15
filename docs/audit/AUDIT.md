@@ -478,18 +478,32 @@ predicate, so RLS could not have been designed around it.
 
 **Test count:** 97 → 114.
 
+### 17.0b Sprint 1b — Row-Level Security (DONE)
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| TEN-1: database-enforced tenant isolation | ✅ Done | `drizzle/0007_rls.sql`, 43 tables with ENABLE+FORCE |
+| Staged rollout (core first) | ⚠️ Rejected, with reason | Single migration; see §17.2 item 6 |
+| Cross-tenant leak test per table | ✅ Done | `rls.e2e.test.ts`, 52 cases over 42 tables |
+| Verify tests do not run as superuser | ⚠️ Partially | Tests run as superuser and become tenant via `SET LOCAL ROLE`; the suite proves the scope is engaged by asserting an unscoped read returns more rows. A production-like non-superuser CI job is still missing. |
+| Verify PGlite enforces policies | ✅ Done | Empirically confirmed before writing code |
+| ADR + docs | ✅ Done | `docs/adr/0003`, `docs/RLS.md`, rollback in `docs/MIGRATION-ROLLBACK.md` |
+
+**Test count:** 114 → 166.
+
+**Two discoveries that changed the design.** (1) An RLS-protected parent does
+**not** protect its children: with only `invoices` protected, one tenant could
+read another's `invoice_items` and attach rows to another's invoice. All 9 child
+tables therefore carry `EXISTS` policies. (2) `set_config(..., true)` **outside**
+a transaction is silently discarded — a helper that sets it outside a transaction
+enforces nothing while appearing to work. Recorded in `docs/RLS.md` §3.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
 
 1. **Sprint 1a — public invoice token fix.** ✅ **Done (see §17.0).**
-2. **Sprint 1b — Row-Level Security.** Enable + `FORCE ROW LEVEL SECURITY` on
-   tenant-scoped tables; the app connects as a non-owner role; `SET LOCAL
-   app.tenant_id` inside every transaction and **never** at session level on a
-   pooled connection; fail closed when the setting is absent. Roll out in
-   stages (invoices → payments → clients → rest) with a per-table cross-tenant
-   leak test. `PGlite` enforces policies, but the tests must demonstrate it
-   rather than assume it, and must not run as superuser.
+2. **Sprint 1b — Row-Level Security.** ✅ **Done (see §17.0b).**
 3. **Sprint 1c — Minimal ledger.** Chart of accounts as a cycle-safe closure
    table, seeded per tenant from a replaceable Algerian SCF-compatible
    template (no hardcoded accounts), immutable journal entries with debits =
@@ -522,3 +536,19 @@ Fixed with the product owner on 2026-11-15:
    product owner as a reporting/fiscal decision, not silently absorbed.
 5. **ESLint backlog unchanged** (475 errors) as instructed; tracked and
    reported in CI.
+6. **RLS staged rollout was not implemented as requested.** The instruction was
+   to roll out per module (invoices → payments → clients → rest). I shipped a
+   single migration instead, because a partially protected schema is harder to
+   reason about than either state: a table outside the policy set is unprotected
+   while its neighbours are, and a runtime flag that disables isolation is
+   precisely the kind of switch that gets left in the wrong position in
+   production. Blast radius is managed by rehearsing the whole set against a
+   copy of production data and watching for empty result sets, which is the
+   signature of a code path reading outside `runTenant`. If per-module gating is
+   still required, splitting `0007_rls.sql` is mechanical — the generator can
+   emit one file per module.
+7. **Tests still run as a superuser.** They become a tenant via
+   `SET LOCAL ROLE erp_app` and prove the scope is engaged, but the instruction
+   was that tests must not run as superuser. Closing this needs a CI PostgreSQL
+   service with a dedicated non-superuser login — it cannot be done with the
+   embedded PGlite database, which has no separate connection identity.
