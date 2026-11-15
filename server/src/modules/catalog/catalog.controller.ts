@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from "@nestjs/common";
 import type { Request } from "express";
 import { ok, okList, parsePagination } from "../../shared/http";
+import { AppError } from "../../shared/errors";
 import { CurrentAuth, RequirePermissions, type AuthContext } from "../../shared/security/decorators";
 import { PERMISSIONS } from "../../shared/security/permissions";
 import { ZodValidationPipe } from "../../shared/validation";
@@ -22,6 +23,15 @@ import {
   type UpdateTaxInput,
 } from "./catalog.dto";
 import { CatalogService } from "./catalog.service";
+import { StockValuationService } from "./stock-valuation.service";
+import type { CostingMethod } from "../../../lib/algorithms/valuation";
+
+/** Only these four are accepted; anything else is a client error, not a default. */
+function parseMethod(value: string | undefined): CostingMethod {
+  if (value === undefined) return "fifo";
+  if (value === "fifo" || value === "lifo" || value === "wac" || value === "fefo") return value;
+  throw AppError.badRequest(`Méthode de valorisation inconnue : ${value} (fifo, lifo, wac, fefo)`);
+}
 
 function ctx(auth: AuthContext, req: Request) {
   return { tenantId: auth.tenantId, userId: auth.userId, ip: req.ip ?? null, userAgent: req.header("user-agent") ?? null };
@@ -29,7 +39,10 @@ function ctx(auth: AuthContext, req: Request) {
 
 @Controller("products")
 export class ProductsController {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(
+    private readonly catalog: CatalogService,
+    private readonly valuation: StockValuationService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.catalogRead)
@@ -51,6 +64,43 @@ export class ProductsController {
   @RequirePermissions(PERMISSIONS.catalogRead)
   async stats(@CurrentAuth() auth: AuthContext, @Req() req: Request) {
     return ok(await this.catalog.productStats(ctx(auth, req)));
+  }
+
+  /**
+   * Stock valuation from the movement history (FIFO by default).
+   *
+   * `staticCost` is the old `quantity * product.cost` figure, returned
+   * alongside so the difference is visible rather than silently swapped.
+   */
+  @Get("stock/valuation")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async stockValuation(
+    @CurrentAuth() auth: AuthContext,
+    @Query("method") method?: string,
+  ) {
+    return ok(await this.valuation.summary({ tenantId: auth.tenantId }, parseMethod(method)));
+  }
+
+  @Get("stock/valuation/layers")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async stockLayers(
+    @CurrentAuth() auth: AuthContext,
+    @Query("method") method?: string,
+  ) {
+    const result = await this.valuation.valueAll({ tenantId: auth.tenantId }, parseMethod(method));
+    return ok({
+      method: result.method,
+      totalQuantity: result.totalQuantity,
+      totalValueMinor: result.totalValueMinor,
+      problems: result.problems,
+      products: result.products.map((product) => ({
+        productId: product.productId,
+        quantity: product.quantity,
+        valueMinor: product.valueMinor,
+        unitCostMinor: product.unitCostMinor,
+        layers: product.layers,
+      })),
+    });
   }
 
   @Post()

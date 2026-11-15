@@ -8,6 +8,7 @@ import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
+import { StockValuationService } from "./stock-valuation.service";
 import type {
   CreateCategoryInput,
   CreateProductInput,
@@ -65,6 +66,8 @@ function serializeProduct(row: Row) {
 
 @Injectable()
 export class CatalogService {
+  constructor(private readonly valuation: StockValuationService) {}
+
   /* ----------------------------- products ----------------------------- */
 
   async listProducts(ctx: Ctx, query: ProductListQuery): Promise<{ items: ReturnType<typeof serializeProduct>[]; pagination: Pagination }> {
@@ -240,6 +243,7 @@ export class CatalogService {
   }
 
   async productStats(ctx: Ctx) {
+
     const db = getDb();
     const [row] = await db
       .select({
@@ -252,10 +256,23 @@ export class CatalogService {
       .leftJoin(stockLevels, eq(stockLevels.productId, products.id))
       .where(and(eq(products.tenantId, ctx.tenantId), isNull(products.deletedAt)));
 
+    // `totalStockValue` used to be the ONLY figure: quantity * product.cost.
+    // That number moves whenever someone edits a product's cost, so it changes
+    // the value of inventory that was bought last month. It is kept here under
+    // its old name for one release, and the movement-derived valuation is
+    // reported next to it so the drift is visible rather than hidden.
+    const valued = await this.valuation.summary({ tenantId: ctx.tenantId });
+
     return {
       summary: {
         totalProducts: Number(row?.totalProducts ?? 0),
+        /** @deprecated static cost basis; use `stockValuation`. */
         totalStockValue: fromMinor(Number(row?.totalStockValue ?? 0)),
+        stockValuation: valued.valuedAmount,
+        stockValuationMinor: valued.valuedAmountMinor,
+        valuationMethod: valued.method,
+        /** staticCost - valued. Non-zero means product costs have drifted. */
+        valuationDifference: fromMinor(valued.differenceMinor),
         lowStockCount: Number(row?.lowStockCount ?? 0),
         outOfStockCount: Number(row?.outOfStockCount ?? 0),
       },
