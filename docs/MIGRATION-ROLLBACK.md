@@ -73,6 +73,7 @@ statement, not a command. The procedure is:
 | `0004_clumsy_arachne.sql` | Additive columns | `ALTER TABLE … DROP COLUMN …;` |
 | `0005_normal_havok.sql` | `uploads` scan columns + check | `ALTER TABLE "uploads" DROP CONSTRAINT IF EXISTS "uploads_scan_status_chk";` then drop `scan_status, scan_engine, scan_signature, scanned_at`. |
 | `0006_stock_guards.sql` | `CHECK (quantity >= 0)` on `stock_levels` | `ALTER TABLE "stock_levels" DROP CONSTRAINT IF EXISTS "stock_levels_quantity_chk";` |
+| `0007_rls.sql` | RLS on 43 tables, `erp_app` role, grants, `resolve_public_token()` | See below. |
 
 ### Notes specific to `0006_stock_guards`
 
@@ -89,6 +90,39 @@ and correct them with an `adjustment` stock movement through the application so
 that the movement history stays reconcilable. The check is `NOT VALID`-free by
 design: we want it enforced immediately, because a negative stock level is
 already corrupt.
+
+### Notes specific to `0007_rls.sql`
+
+This migration is the most consequential to revert because it changes *who can
+see what*, not just a shape.
+
+```sql
+-- 1. Turn the policies off, table by table (generated list is in the file).
+--    Disabling RLS without this next step leaves the app role unable to read.
+ALTER TABLE "invoices"   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "payments"   DISABLE ROW LEVEL SECURITY;
+-- ... repeat for every table in drizzle/0007_rls.sql
+
+-- 2. Restore the app role's ability to read without a tenant setting is NOT
+--    possible while policies remain. Do not "fix" it by granting BYPASSRLS:
+--    that removes the isolation AND hides the fact.
+
+-- 3. Remove the security-definer helper so no caller can rely on it.
+DROP FUNCTION IF EXISTS public.resolve_public_token(text);
+
+-- 4. Drop the role only after revoking its privileges.
+DROP OWNED BY erp_app;
+DROP ROLE IF EXISTS erp_app;
+```
+
+**Deploy the previous application image in the same step.** Code that calls
+`runTenant()` sets `app.tenant_id`, which is harmless when no policy exists but
+`SET LOCAL ROLE erp_app` will fail if the role has been dropped.
+
+**Do not roll back RLS to work around an empty result set.** An empty screen
+after this migration means a code path reads tenant data outside `runTenant`.
+Wrap that path. Disabling isolation to make it pass reintroduces the exact defect
+the migration exists to remove.
 
 ## 6. Data-repair runbook (money)
 
