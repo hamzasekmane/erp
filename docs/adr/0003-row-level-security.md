@@ -118,8 +118,9 @@ request rather than opting out per query.**
 2. **RLS scopes tenants, not users.** Within a tenant, RBAC remains responsible.
 3. **`plans` has no policy** and is readable by any app credential. It holds no
    tenant data.
-4. **A startup check that the connected role is neither superuser nor table
-   owner** is not yet implemented. Until it is, a misconfiguration is possible.
+4. **The startup check warns, it does not refuse to boot.** `assertRlsEffective()`
+   logs a loud warning when the connected role is a superuser or has
+   `BYPASSRLS`, but a privileged connection stays possible by design.
 
 ## Verification
 
