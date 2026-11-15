@@ -19,7 +19,16 @@ import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
-import { fromMinor, roundHalfUp, toMinor } from "../../shared/money";
+import {
+  MoneyError,
+  fromMinor,
+  invoiceTotals,
+  percentToBp,
+  toMinor,
+  toMinorStrict,
+  type InvoiceTotals as Totals,
+  type LineAmounts,
+} from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
 import { PaymentsService } from "../payments/payments.service";
 import type { CreateInvoiceInput, InvoiceItemInput, SendInvoiceInput, UpdateInvoiceInput } from "./invoices.dto";
@@ -51,34 +60,49 @@ type InvoiceRow = {
   clientCode: string | null;
 };
 
-type ComputedLine = {
-  input: InvoiceItemInput;
-  lineBaseMinor: number;
-  taxMinor: number;
-  lineTotalMinor: number;
-};
-
 function ymd(value: Date | string): string {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-function computeLines(items: InvoiceItemInput[]): {
-  lines: ComputedLine[];
-  subtotalMinor: number;
-  taxMinor: number;
-} {
-  let subtotalMinor = 0;
-  let taxMinor = 0;
-  const lines = items.map((input) => {
-    const gross = roundHalfUp(input.quantity * toMinor(input.unitPrice));
-    const discountAmount = roundHalfUp((gross * input.discount) / 100);
-    const lineBaseMinor = gross - discountAmount;
-    const lineTaxMinor = roundHalfUp((lineBaseMinor * input.taxRate) / 100);
-    subtotalMinor += lineBaseMinor;
-    taxMinor += lineTaxMinor;
-    return { input, lineBaseMinor, taxMinor: lineTaxMinor, lineTotalMinor: lineBaseMinor + lineTaxMinor };
-  });
-  return { lines, subtotalMinor, taxMinor };
+/**
+ * Adapts validated DTOs to the single money implementation in
+ * `shared/money.ts`. Percentages are converted to basis points exactly once,
+ * here, and invalid precision is rejected with a field-level 400 rather than
+ * being silently rounded.
+ */
+function computeInvoiceTotals(input: {
+  items: InvoiceItemInput[];
+  discount?: number;
+  shipping?: number;
+}): Totals {
+  try {
+    return invoiceTotals({
+      items: input.items.map((item, index) => ({
+        quantity: item.quantity,
+        unitPriceMinor: toMinorStrict(item.unitPrice, `items[${index}].unitPrice`),
+        discountBp: percentToBp(item.discount, `items[${index}].discount`),
+        taxRateBp: percentToBp(item.taxRate, `items[${index}].taxRate`),
+      })),
+      globalDiscountMinor: toMinorStrict(input.discount ?? 0, "discount"),
+      shippingMinor: toMinorStrict(input.shipping ?? 0, "shipping"),
+    });
+  } catch (error) {
+    if (error instanceof MoneyError) {
+      throw AppError.badRequest(error.message, [{ field: error.field, message: error.message }]);
+    }
+    throw error;
+  }
+}
+
+/** Line input paired with its computed amounts, in insertion order. */
+type ComputedLine = { input: InvoiceItemInput; amounts: LineAmounts };
+
+function computeLines(items: InvoiceItemInput[], discount: number, shipping: number) {
+  const totals = computeInvoiceTotals({ items, discount, shipping });
+  return {
+    lines: totals.lines.map((amounts, index) => ({ input: items[index]!, amounts })),
+    totals,
+  };
 }
 
 @Injectable()
@@ -285,11 +309,13 @@ export class InvoicesService {
     const dueDate = ymd(input.dueDate);
     if (dueDate < issueDate) throw AppError.badRequest("La date d'échéance doit être postérieure à la date d'émission");
 
-    const { lines, subtotalMinor, taxMinor } = computeLines(input.items);
-    const globalDiscountMinor = toMinor(input.discount);
-    const shippingMinor = toMinor(input.shipping);
-    const totalMinor = subtotalMinor - globalDiscountMinor + shippingMinor + taxMinor;
-    if (totalMinor < 0) throw AppError.badRequest("Le total de la facture ne peut pas être négatif");
+    // Single money implementation: VAT is charged on the net (post-discount) base.
+    const { lines, totals } = computeLines(input.items, input.discount ?? 0, input.shipping ?? 0);
+    const subtotalMinor = totals.subtotalMinor;
+    const globalDiscountMinor = totals.globalDiscountMinor;
+    const shippingMinor = toMinorStrict(input.shipping ?? 0, "shipping");
+    const taxMinor = totals.taxMinor;
+    const totalMinor = totals.totalMinor;
 
     const id = newId();
     const number = await documentNumber(ctx.tenantId, "invoice", settings?.invoicePrefix?.replace(/-$/, "") || "FA");
@@ -325,11 +351,11 @@ export class InvoicesService {
           productId: line.input.productId ?? null,
           description: line.input.description,
           quantity: String(line.input.quantity),
-          unitPriceMinor: toMinor(line.input.unitPrice),
-          discountBp: Math.round(line.input.discount * 100),
-          taxRateBp: Math.round(line.input.taxRate * 100),
-          taxMinor: line.taxMinor,
-          lineTotalMinor: line.lineTotalMinor,
+          unitPriceMinor: toMinorStrict(line.input.unitPrice, `items[${index}].unitPrice`),
+          discountBp: percentToBp(line.input.discount, "discount"),
+          taxRateBp: percentToBp(line.input.taxRate, "taxRate"),
+          taxMinor: line.amounts.taxMinor,
+          lineTotalMinor: line.amounts.totalMinor,
         })),
       );
       await tx.insert(invoiceStatusHistory).values({
@@ -365,19 +391,25 @@ export class InvoicesService {
 
     if (input.items) {
       if (Number(existing.paidMinor) > 0) throw AppError.conflict("INVOICE_HAS_PAYMENTS", "Une facture partiellement payée ne peut pas être modifiée.");
-      const computed = computeLines(input.items);
-      const discountMinor = toMinor(input.discount ?? fromMinor(Number(existing.discountMinor)));
-      const shippingMinor = toMinor(input.shipping ?? fromMinor(Number(existing.shippingMinor)));
-      const totalMinor = computed.subtotalMinor - discountMinor + shippingMinor + computed.taxMinor;
-      if (totalMinor < 0) throw AppError.badRequest("Le total de la facture ne peut pas être négatif");
-      patch.subtotalMinor = computed.subtotalMinor;
-      patch.taxMinor = computed.taxMinor;
-      patch.discountMinor = discountMinor;
-      patch.shippingMinor = shippingMinor;
+      const discountInput = input.discount ?? fromMinor(Number(existing.discountMinor));
+      const shippingInput = input.shipping ?? fromMinor(Number(existing.shippingMinor));
+      const computed = computeLines(input.items, discountInput, shippingInput);
+      const { totals: newTotals } = computed;
+      const totalMinor = newTotals.totalMinor;
+      // Preserve the amount already collected: only the outstanding balance moves.
+      const paidMinor = Number(existing.paidMinor);
+      if (totalMinor < paidMinor) {
+        throw AppError.conflict("INVOICE_BELOW_PAID_AMOUNT", "Le nouveau total est inférieur aux paiements déjà encaissés.");
+      }
+      patch.subtotalMinor = newTotals.subtotalMinor;
+      patch.taxMinor = newTotals.taxMinor;
+      patch.discountMinor = newTotals.globalDiscountMinor;
+      patch.shippingMinor = toMinorStrict(shippingInput, "shipping");
       patch.totalMinor = totalMinor;
-      patch.dueMinor = totalMinor;
+      patch.paidMinor = paidMinor;
+      patch.dueMinor = totalMinor - paidMinor;
       lines = computed.lines;
-      totals = { subtotalMinor: computed.subtotalMinor, taxMinor: computed.taxMinor, totalMinor };
+      totals = { subtotalMinor: newTotals.subtotalMinor, taxMinor: newTotals.taxMinor, totalMinor };
     }
 
     const nextIssue = (patch.issueDate as string | undefined) ?? existing.issueDate;
@@ -396,11 +428,11 @@ export class InvoicesService {
             productId: line.input.productId ?? null,
             description: line.input.description,
             quantity: String(line.input.quantity),
-            unitPriceMinor: toMinor(line.input.unitPrice),
-            discountBp: Math.round(line.input.discount * 100),
-            taxRateBp: Math.round(line.input.taxRate * 100),
-            taxMinor: line.taxMinor,
-            lineTotalMinor: line.lineTotalMinor,
+            unitPriceMinor: toMinorStrict(line.input.unitPrice, `items[${index}].unitPrice`),
+            discountBp: percentToBp(line.input.discount, "discount"),
+            taxRateBp: percentToBp(line.input.taxRate, "taxRate"),
+            taxMinor: line.amounts.taxMinor,
+            lineTotalMinor: line.amounts.totalMinor,
           })),
         );
       }
