@@ -25,8 +25,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # The API also reads variables from the environment below. An optional
+    # env_file keeps `docker compose up` working from a clean clone: copy
+    # server/.env.production.example to server/.env.production to override.
     env_file:
-      - ./server/.env.production
+      - path: ./server/.env.production
+        required: false
     environment:
       NODE_ENV: production
       DATABASE_URL: postgres://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-erp}
@@ -40,6 +44,12 @@ services:
     volumes:
       - uploads:/app/uploads
       - mail:/app/.data/mail
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     stop_grace_period: 30s
 
   web:
@@ -53,12 +63,19 @@ services:
         API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:4000}
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     stop_grace_period: 30s
 
 volumes:
