@@ -536,21 +536,48 @@ Consequences recorded rather than hidden:
   `server/`), but they are correctly outside this gate: `npm prune --omit=dev`
   means they do not enter the image.
 
+### 17.0d Sprint 1c — Minimal ledger (DONE)
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| ACC-1: double-entry ledger | ✅ Done | `account`, `account_closure`, `journal_entries`, `journal_lines`, `accounting_periods` |
+| Chart of accounts via closure table | ✅ Done | `account_closure`, 212 ms subtree balance over 1M lines |
+| Cycle-safe, configurable per tenant | ✅ Done | `buildClosure` rejects cycles/self-parents/dangling parents; tested |
+| Seeded from a replaceable Algerian SCF template | ✅ Done | `chart-of-accounts.template.ts`, seeded at registration |
+| No hardcoded accounts | ✅ Done | Posting resolves `system_role`; no code string appears in application logic |
+| Immutable journals, debits = credits in DB **and** domain | ✅ Done | Triggers reject UPDATE/DELETE; deferred constraint trigger at COMMIT; `validatePosting` |
+| Reversals, not deletes | ✅ Done | `reverseEntry`, both directions linked, reversal-of-reversal refused |
+| Posting in the same DB transaction as the business write | ✅ Done | `postInTx(tx, ...)`; rollback test proves no invoice without its entry |
+| Trial balance | ✅ Done | Balanced globally and per account; 1399 ms at 1M lines |
+| Seams only for manual journals + period locking | ✅ Done | Manual posting goes through `postInTx`; `accounting_periods` |
+| Property-based balance tests | ✅ Done | 2000 generated entries + 200 reversal round-trips |
+| 1M-line benchmark | ✅ Done | `npm run bench:ledger`, 1 000 002 lines |
+| ADR | ✅ Done | `docs/adr/0004-ledger.md` |
+
+**Test count:** 166 → **217**.
+
+**The guarantee caught its own implementation.** The first posting version
+failed the balance check by exactly `discount + shipping` — it debited
+receivable (already net of the discount) *and* debited the discount while
+crediting net revenue. Recorded in the ADR.
+
+**The benchmark found a performance bug no test could.** Journal numbering used
+`max(regexp_replace(...))`, a full scan of 500 000 rows: 1 070 ms per posting.
+An index-backed `ORDER BY number DESC LIMIT 1` made it 131 ms.
+
+**A gap the RLS work exposed.** Adding tables after migration 0007 produced
+`permission denied for table accounts` — the app role had no grant. That is not
+fail-closed, it is a 500 on every request. The generator now emits per-wave
+migrations (policies *and* grants) and refuses to run when a schema table is
+unclassified.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
 
 1. **Sprint 1a — public invoice token fix.** ✅ **Done (see §17.0).**
 2. **Sprint 1b — Row-Level Security.** ✅ **Done (see §17.0b).**
-3. **Sprint 1c — Minimal ledger.** Chart of accounts as a cycle-safe closure
-   table, seeded per tenant from a replaceable Algerian SCF-compatible
-   template (no hardcoded accounts), immutable journal entries with debits =
-   credits enforced in both the DB and the domain, reversal entries instead of
-   deletes, automatic posting from invoices and payments *inside the same
-   transaction as the business write*, and a trial-balance report. Seams left
-   for manual journals and period locking (schema + interfaces only, no UI).
-   Property-based tests for the balance invariant; trial balance benchmarked
-   at 1M journal lines.
+3. **Sprint 1c — Minimal ledger.** ✅ **Done (see §17.0d).**
 
 ### 17.2 Accepted deviations and known gaps from Sprint 0
 
