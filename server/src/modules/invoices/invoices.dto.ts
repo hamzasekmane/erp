@@ -49,3 +49,14 @@ export const invoicePaymentSchema = z.object({
 });
 
 export type InvoicePaymentInput = z.infer<typeof invoicePaymentSchema>;
+
+/**
+ * Public share links. The upper bound is enforced again in the service, which
+ * clamps instead of trusting the client, but rejecting absurd values here gives
+ * the caller a clear 400.
+ */
+export const createPublicLinkSchema = z.object({
+  expiresInDays: z.number().int().min(1).max(90).optional(),
+});
+
+export type CreatePublicLinkInput = z.infer<typeof createPublicLinkSchema>;

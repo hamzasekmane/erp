@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import type { Response } from "express";
@@ -7,6 +8,7 @@ import { getDb } from "../../db/client";
 import {
   clients,
   invoiceItems,
+  invoicePublicTokens,
   invoiceStatusHistory,
   invoices,
   notifications,
@@ -30,8 +32,19 @@ import {
   type LineAmounts,
 } from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
+import { hashToken } from "../../shared/security/tokens";
 import { PaymentsService } from "../payments/payments.service";
 import type { CreateInvoiceInput, InvoiceItemInput, SendInvoiceInput, UpdateInvoiceInput } from "./invoices.dto";
+
+/** Public links are short-lived by default and capped so they cannot be eternal. */
+export const PUBLIC_LINK_MIN_DAYS = 1;
+export const PUBLIC_LINK_MAX_DAYS = 90;
+export const PUBLIC_LINK_DEFAULT_DAYS = 30;
+
+function clampDays(days: number | undefined): number {
+  if (!Number.isFinite(days ?? Number.NaN)) return PUBLIC_LINK_DEFAULT_DAYS;
+  return Math.min(PUBLIC_LINK_MAX_DAYS, Math.max(PUBLIC_LINK_MIN_DAYS, Math.trunc(days as number)));
+}
 
 type Ctx = { tenantId: string; userId: string; ip?: string | null; userAgent?: string | null };
 
@@ -201,20 +214,144 @@ export class InvoicesService {
     };
   }
 
-  /** Public document view used by `/invoices/[id]/view` (no auth). */
-  async publicView(id: string) {
+  /* --------------------------- public links --------------------------- */
+
+  /**
+   * Mints a shareable link for an invoice.
+   *
+   * The raw token is returned exactly once and only its SHA-256 hash is stored,
+   * so a database leak does not yield working links. Links expire and can be
+   * revoked (see `revokePublicLinks`).
+   */
+  async createPublicLink(ctx: Ctx, id: string, input: { expiresInDays?: number }) {
+    const db = getDb();
+    const invoice = await this.requireInvoice(ctx.tenantId, id);
+    if (invoice.status === "draft") {
+      throw AppError.unprocessable("INVOICE_NOT_PUBLISHED", "Un brouillon ne peut pas être publié.");
+    }
+
+    const days = clampDays(input.expiresInDays);
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const tokenId = newId();
+
+    await db.insert(invoicePublicTokens).values({
+      id: tokenId,
+      invoiceId: invoice.id,
+      tokenHash: hashToken(token),
+      expiresAt,
+    });
+
+    await audit({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      action: "invoice.public_link_created",
+      entity: "invoice",
+      entityId: invoice.id,
+      after: { tokenId, expiresAt: expiresAt.toISOString(), days },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+
+    return {
+      id: tokenId,
+      token,
+      expiresAt: expiresAt.toISOString(),
+      // The frontend route that consumes the token.
+      url: `/invoices/public/${token}`,
+    };
+  }
+
+  /** Revokes every active public link for an invoice. Returns how many were revoked. */
+  async revokePublicLinks(ctx: Ctx, id: string) {
+    const db = getDb();
+    // `requireInvoice` scopes to the tenant, so another tenant's invoice is a 404.
+    const invoice = await this.requireInvoice(ctx.tenantId, id);
+    const revoked = await db
+      .update(invoicePublicTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(invoicePublicTokens.invoiceId, invoice.id), isNull(invoicePublicTokens.revokedAt)))
+      .returning({ id: invoicePublicTokens.id });
+
+    await audit({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      action: "invoice.public_link_revoked",
+      entity: "invoice",
+      entityId: invoice.id,
+      after: { revoked: revoked.length },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+
+    return { revoked: revoked.length };
+  }
+
+  /**
+   * RLS SEAM — resolves a public token to an invoice WITHOUT a tenant context.
+   *
+   * This is the single query in the codebase that must read tenant-scoped data
+   * while no `app.tenant_id` is known, because the token *is* the only
+   * credential. When Row-Level Security lands (Sprint 1b) this method must run
+   * under the narrowest possible role: a policy that grants SELECT on exactly
+   * `invoice_public_tokens`, `invoices`, `invoice_items`, `clients` and
+   * `tenants`, restricted to the row the presented token identifies, and that
+   * grants nothing else. Everything downstream of here works with a resolved
+   * `tenantId`.
+   *
+   * Returns null for unknown, expired and revoked tokens alike so callers
+   * cannot distinguish "never existed" from "revoked" (no oracle).
+   */
+  async resolvePublicToken(token: string): Promise<{ invoiceId: string; tenantId: string } | null> {
+    if (!token || token.length > 128) return null;
+    const db = getDb();
+    const now = new Date();
+
+    const [row] = await db
+      .select({ invoiceId: invoicePublicTokens.invoiceId })
+      .from(invoicePublicTokens)
+      .where(
+        and(
+          eq(invoicePublicTokens.tokenHash, hashToken(token)),
+          isNull(invoicePublicTokens.revokedAt),
+          gt(invoicePublicTokens.expiresAt, now),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+
+    // The invoice may have been soft-deleted after the link was minted.
+    const [invoice] = await db
+      .select({ id: invoices.id, tenantId: invoices.tenantId, status: invoices.status })
+      .from(invoices)
+      .where(and(eq(invoices.id, row.invoiceId), isNull(invoices.deletedAt)))
+      .limit(1);
+    if (!invoice || invoice.status === "draft") return null;
+
+    return { invoiceId: invoice.id, tenantId: invoice.tenantId };
+  }
+
+  /** Public document view resolved from a token (no authentication). */
+  async publicViewByToken(token: string) {
+    const resolved = await this.resolvePublicToken(token);
+    if (!resolved) throw AppError.notFound("Document introuvable ou lien expiré");
+
     const db = getDb();
     const [row] = await db
       .select({ invoice: invoices, clientName: clients.name, clientEmail: clients.email, clientPhone: clients.phone, clientCode: clients.code })
       .from(invoices)
       .leftJoin(clients, eq(clients.id, invoices.clientId))
-      .where(and(eq(invoices.id, id), isNull(invoices.deletedAt)))
+      // The tenantId predicate is derived from the token, never from the caller.
+      .where(and(eq(invoices.id, resolved.invoiceId), eq(invoices.tenantId, resolved.tenantId), isNull(invoices.deletedAt)))
       .limit(1);
-    if (!row) throw AppError.notFound("Facture introuvable");
-    if (row.invoice.status === "draft") throw AppError.forbidden("Document non publié", "INVOICE_NOT_PUBLISHED");
+    if (!row) throw AppError.notFound("Document introuvable ou lien expiré");
 
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, row.invoice.tenantId)).limit(1);
-    const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).orderBy(asc(invoiceItems.position));
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, resolved.tenantId)).limit(1);
+    const items = await db
+      .select()
+      .from(invoiceItems)
+      .where(eq(invoiceItems.invoiceId, resolved.invoiceId))
+      .orderBy(asc(invoiceItems.position));
 
     return {
       invoice: this.serialize(row as InvoiceRow, items, items.length),
@@ -566,10 +703,23 @@ export class InvoicesService {
 
   /* -------------------------------- PDF ------------------------------- */
 
-  async streamPdf(id: string, tenantId: string | null, res: Response): Promise<void> {
+  /** Public PDF download: the token, not the invoice id, authorises the read. */
+  async streamPdfByPublicToken(token: string, res: Response): Promise<void> {
+    const resolved = await this.resolvePublicToken(token);
+    if (!resolved) throw AppError.notFound("Document introuvable ou lien expiré");
+    await this.streamPdf(resolved.invoiceId, resolved.tenantId, res);
+  }
+
+  /**
+   * Streams the invoice PDF.
+   *
+   * `tenantId` is REQUIRED: there is no anonymous-by-id path any more. Public
+   * downloads resolve a token to a tenant first (see `streamPdfByPublicToken`)
+   * and then call this, so the tenant predicate is always present.
+   */
+  async streamPdf(id: string, tenantId: string, res: Response): Promise<void> {
     const db = getDb();
-    const filters: SQL[] = [eq(invoices.id, id), isNull(invoices.deletedAt)];
-    if (tenantId) filters.push(eq(invoices.tenantId, tenantId));
+    const filters: SQL[] = [eq(invoices.id, id), eq(invoices.tenantId, tenantId), isNull(invoices.deletedAt)];
     const [row] = await db
       .select({ invoice: invoices, clientName: clients.name })
       .from(invoices)

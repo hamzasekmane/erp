@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createCheckoutSchema } from "../modules/payments/chargily/chargily.schema";
 import { createClientSchema, updateClientSchema } from "../modules/clients/clients.dto";
 import { createProductSchema, createCategorySchema, createTaxSchema } from "../modules/catalog/catalog.dto";
-import { createInvoiceSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
+import { createInvoiceSchema, createPublicLinkSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
 import { createPaymentSchema, gatewaySchema, refundSchema } from "../modules/payments/payments.dto";
 import {
   forgotPasswordSchema,
@@ -152,7 +152,10 @@ register("post", "/invoices/:id/duplicate", "Invoices", "Dupliquer une facture",
 register("post", "/invoices/:id/send", "Invoices", "Envoyer une facture", { params: idParams });
 register("post", "/invoices/:id/pay", "Invoices", "Encaisser un paiement", { params: idParams });
 register("get", "/invoices/:id/pdf", "Invoices", "PDF de la facture", { params: idParams });
-register("get", "/invoices/:id/view", "Invoices", "Vue publique", { params: idParams, security: false });
+register("post", "/invoices/:id/public-link", "Invoices", "Créer un lien public (jeton haché, expirant, révocable)", { params: idParams, body: createPublicLinkSchema });
+register("delete", "/invoices/:id/public-link", "Invoices", "Révoquer les liens publics d'une facture", { params: idParams });
+register("get", "/invoices/public/:token", "Invoices", "Vue publique par jeton", { security: false });
+register("get", "/invoices/public/:token/pdf", "Invoices", "PDF public par jeton", { security: false });
 register("delete", "/invoices/:id", "Invoices", "Supprimer une facture", { params: idParams });
 
 /* payments */
