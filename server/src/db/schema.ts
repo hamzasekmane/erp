@@ -31,6 +31,20 @@ const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull(
 const deletedAt = () => timestamp("deleted_at", { withTimezone: true });
 const money = (name: string) => bigint(name, { mode: "number" }).notNull().default(0);
 
+/**
+ * Normalized search text, kept in sync by a database trigger (migration 0013).
+ *
+ * It exists so that search can use a trigram index: `lower(name) like '%x%'`
+ * cannot use any index, and Arabic spellings must be folded BEFORE indexing
+ * because pg_trgm scores `دراجة` against `دراجه` at 0.53, not 1. The trigger
+ * owns the value — application code must never write it, or the column and the
+ * name it is derived from would disagree after the first UPDATE that forgets.
+ *
+ * Declared here so Drizzle can select it; the trigger is the only writer.
+ */
+const searchText = () => text("search_text");
+
+
 /* ------------------------------------------------------------------ */
 /* Tenancy                                                             */
 /* ------------------------------------------------------------------ */
@@ -256,6 +270,8 @@ export const clients = pgTable(
     tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
     code: text("code").notNull(),
     name: text("name").notNull(),
+    /** Derived and index-backed; written by the clients_search_text_trg trigger. */
+    searchText: searchText(),
     type: text("type").notNull().default("individual"),
     category: text("category").notNull().default("regular"),
     email: text("email"),
@@ -410,6 +426,8 @@ export const products = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     createdBy: text("created_by"),
     legacyId: text("legacy_id"),
+    /** Derived and index-backed; written by the products_search_text_trg trigger. */
+    searchText: searchText(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

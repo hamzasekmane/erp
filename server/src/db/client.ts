@@ -1,6 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
+// pg_trgm is a contrib extension: PGlite only exposes it if it is passed at
+// construction, so "CREATE EXTENSION" alone fails with "not available".
+// unaccent is deliberately NOT enabled: the Arabic folds live in
+// search_normalize() (migration 0013), which must match the JS in every detail
+// and would be undercut by a second, differently-behaved normalizer.
+import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { drizzle as drizzleNodePg } from "drizzle-orm/node-postgres";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -69,7 +75,7 @@ export async function initDb(): Promise<void> {
 
   if (useEmbeddedDb) {
     mkdirSync(env.PGLITE_DATA_DIR, { recursive: true });
-    const client = new PGlite(env.PGLITE_DATA_DIR);
+    const client = new PGlite(env.PGLITE_DATA_DIR, { extensions: { pg_trgm } });
     await client.waitReady;
     const db = drizzlePglite(client, { schema }) as unknown as Database;
     holder = {
