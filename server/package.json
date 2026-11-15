@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "dev": "node -r @swc-node/register src/main.ts",
     "db:generate": "drizzle-kit generate --dialect postgresql --schema src/db/schema.ts --out drizzle",
     "db:migrate": "tsx src/db/migrate.ts",
@@ -14,7 +14,8 @@
     "test": "vitest run",
     "db:inspect-discounts": "tsx src/db/scripts/inspect-discounts.ts",
     "db:generate-rls": "tsx src/db/scripts/generate-rls.ts",
-    "bench:ledger": "tsx src/db/scripts/bench-ledger.ts"
+    "bench:ledger": "tsx src/db/scripts/bench-ledger.ts",
+    "bench:valuation": "tsx src/db/scripts/benchmark-valuation.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",

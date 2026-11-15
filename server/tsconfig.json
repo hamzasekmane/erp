@@ -12,10 +12,13 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "sourceMap": true,
     "types": ["node", "multer"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+  // `lib/` holds the framework-agnostic algorithm library (Phase 3). It compiles
+  // with the service so there is one tsconfig and no build-order coupling;
+  // output lands in dist/src and dist/lib.
+  "include": ["src/**/*.ts", "lib/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "lib/**/*.test.ts"]
 }
