@@ -18,6 +18,20 @@
 -- search_path would silently be a lie.
 
 --> statement-breakpoint
+-- normalize() requires UTF8 server encoding and PostgreSQL >= 13. Fail here, at
+-- migration time, with a sentence that says which, rather than at the first
+-- search with "function normalize(text, unknown) does not exist" or a 500.
+DO $$
+BEGIN
+  IF current_setting('server_encoding') <> 'UTF8' THEN
+    RAISE EXCEPTION 'search_normalize() needs server_encoding UTF8, this database is %', current_setting('server_encoding');
+  END IF;
+  IF current_setting('server_version_num')::int < 130000 THEN
+    RAISE EXCEPTION 'search_normalize() needs PostgreSQL 13 or newer for normalize(), this server is %', current_setting('server_version');
+  END IF;
+END $$;
+
+--> statement-breakpoint
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 --> statement-breakpoint

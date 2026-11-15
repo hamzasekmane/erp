@@ -2,6 +2,8 @@ name: erp
 
 services:
   db:
+    # 13+ is required: search_normalize() (migration 0013) uses normalize(),
+    # added in PostgreSQL 13, and it needs UTF8 server encoding.
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
