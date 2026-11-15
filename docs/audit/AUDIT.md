@@ -620,6 +620,73 @@ mistake in two places:**
 Both were reproduced in a fresh clone before being fixed, and the clean clone
 now passes tsc, 263 tests, build, audit and the OpenAPI drift gate.
 
+### 17.0f Phase 3, second algorithm module — BOM/MRP (DONE)
+
+The catalogue knew products and stock but not that one product is built from
+others, so purchasing could not ask the question it exists to ask: *how much of
+each component do I have to buy to build fifty of these?*
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Framework-agnostic library | ✅ | `server/lib/algorithms/bom.ts`, no Nest/Drizzle/I-O |
+| Cycle detection that names the path | ✅ | `findCycle` (3-colour DFS), surfaced as a 400 |
+| Deterministic topological order | ✅ | `topologicalOrder` (Kahn), children before parents |
+| Multi-level explosion with diamond accumulation | ✅ | `explode`, level-by-level |
+| Net requirement vs stock on hand | ✅ | `netRequirements`, leaves only by default |
+| Where-used, depth, rolled-up cost | ✅ | `whereUsed`, `bomDepth`, `rolledUpCost` |
+| Storage + RLS | ✅ | `bom_lines`, `0011_swift_spiral.sql`, `0012_rls_bom.sql` |
+| Endpoints | ✅ | `GET/PUT /products/:id/bom`, `DELETE …/bom/:childId`, `…/explosion`, `…/requirements`, `…/where-used`, `…/cost` |
+| Property-based tests | ✅ | 6 seeded suites over random DAGs |
+| ADR | ✅ | `docs/adr/0006-bom-mrp.md` |
+
+**Test count:** 263 → 328 (15 files). `npm run openapi` → 112 paths.
+
+**The diamond is the test that matters.** In the fixture, a bike needs two
+wheels and a frame, each wheel needs a bolt, and the frame needs four. A
+depth-first walk that stops at the first sighting of the bolt reports 20 or 40
+for a batch of ten; the correct answer is 60. Explosion is therefore
+breadth-first by level, accumulating shared components once per path, and
+`sources` records which parents contributed so the figure can be explained.
+
+**Rounding is done once, at the end.** `requiredMilli` stays exact and
+`requiredWhole` is a single ceiling. Ceiling per level compounds: three levels
+of 1.001 units give 8 instead of 2. Both rules are asserted, including the
+`1.001³ → 2` case.
+
+**Four defects were found by the tests before anything was committed**, which is
+the point of writing the invariants first:
+
+1. `topologicalOrder` counted *parents* rather than dependencies, so it emitted
+   parents first — the opposite of what its own docstring and the build order
+   require.
+2. `explode`'s path guard tested the current node's own path rather than the
+   child's, so every parent looked like a cycle.
+3. Milli-units were multiplied without dividing by 1000, inflating every
+   requirement a thousandfold; the diamond reported 6 000 000 instead of 6 000.
+4. `rolledUpCost` rolled a bought assembly's children in *on top of* its own
+   recorded cost, double-counting the material. A recorded cost is now treated
+   as authoritative for that item.
+
+One expectation was wrong rather than the code: a bolt under a level-1 parent
+sits at level **2**, not level 1.
+
+**Schema finding worth recording:** `products.cost_minor` is
+`NOT NULL DEFAULT 0`, so "no cost entered" and "this item is free" are the same
+value. The service reads `0` as missing, which means a genuinely free component
+is reported as `unpriced`. Closing that properly needs a nullable column or a
+`cost_source`, i.e. a migration — recorded as residual risk in ADR-0006 rather
+than papered over.
+
+**Migrations:** an added table needed a **new RLS wave** (`0012_rls_bom.sql`),
+not an edit to `0007_rls.sql`. The generator initially grew 0007, which is
+already applied everywhere; the wave list in `generate-rls.ts` is the correct
+place. Two guards forced the accompanying edits, and both did their job: the RLS
+test failed until `bom_lines` was classified in `TENANT_TABLES`, and then failed
+again because the generic leak test assumed exactly one row per tenant. That
+assertion now compares A's row count before and after instead of hardcoding 1 —
+stricter, and no longer broken by a table that legitimately holds several rows
+per tenant.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
