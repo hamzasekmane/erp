@@ -129,6 +129,8 @@ register("get", "/client-notes", "Clients", "Notes clients");
 /* catalog */
 register("get", "/products", "Catalog", "Lister les produits", { query: pageQuery, response: listResponse(z.unknown()) });
 register("get", "/products/stats", "Catalog", "Statistiques produits");
+register("get", "/products/stock/valuation", "Catalog", "Valorisation du stock (fifo, lifo, wac, fefo)");
+register("get", "/products/stock/valuation/layers", "Catalog", "Couches de coût par produit");
 register("post", "/products", "Catalog", "Créer un produit", { body: createProductSchema });
 register("put", "/products/:id", "Catalog", "Modifier un produit", { params: idParams });
 register("patch", "/products/:id/status", "Catalog", "Activer/désactiver un produit", { params: idParams });

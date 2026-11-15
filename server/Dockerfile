@@ -10,6 +10,9 @@ FROM deps AS build
 WORKDIR /app
 COPY tsconfig.json ./
 COPY src ./src
+# The framework-agnostic algorithm library lives outside src/ and is compiled
+# with the service (rootDir is ".", output lands in dist/src and dist/lib).
+COPY lib ./lib
 RUN npm run build \
  && npm prune --omit=dev
 
