@@ -35,7 +35,7 @@ it exactly in SQL — with a test that proves the two agree.**
 - `lib/algorithms/search.ts` — `normalizeSearchText`, `tokenize`,
   `levenshtein`, and a `SearchTrie` with prefix, completion, fuzzy and
   remove/re-insert support. Framework-free, so it is testable as pure functions.
-- `search_normalize(text)` in SQL (migration 0013), **`IMMUTABLE`**, mirrored
+- `search_normalize(text)` in SQL (migration 0014), **`IMMUTABLE`**, mirrored
   rule-for-rule.
 - `products.search_text` and `clients.search_text`, maintained by a trigger, with
   a GIN `gin_trgm_ops` index.

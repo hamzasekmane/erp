@@ -78,7 +78,7 @@ Quantities are `numeric(18,3)`, matching `stock_levels`, so a BOM may call for
 ### Tenant isolation
 
 `bom_lines` carries `tenant_id` and is covered by a forced RLS policy in
-`0012_rls_bom.sql`. That is a **new wave**, not an edit to `0007_rls.sql`: 0007
+`0013_rls_bom.sql`. That is a **new wave**, not an edit to `0007_rls.sql`: 0007
 is already applied in every environment and editing it would apply to nobody.
 The generator, the RLS test's table list and the `products` FK check all belong
 in the same commit as the table, or the guards fail on the next run.

@@ -634,7 +634,7 @@ each component do I have to buy to build fifty of these?*
 | Multi-level explosion with diamond accumulation | ✅ | `explode`, level-by-level |
 | Net requirement vs stock on hand | ✅ | `netRequirements`, leaves only by default |
 | Where-used, depth, rolled-up cost | ✅ | `whereUsed`, `bomDepth`, `rolledUpCost` |
-| Storage + RLS | ✅ | `bom_lines`, `0011_swift_spiral.sql`, `0012_rls_bom.sql` |
+| Storage + RLS | ✅ | `bom_lines`, `0011_swift_spiral.sql`, `0013_rls_bom.sql` |
 | Endpoints | ✅ | `GET/PUT /products/:id/bom`, `DELETE …/bom/:childId`, `…/explosion`, `…/requirements`, `…/where-used`, `…/cost` |
 | Property-based tests | ✅ | 6 seeded suites over random DAGs |
 | ADR | ✅ | `docs/adr/0006-bom-mrp.md` |
@@ -677,7 +677,7 @@ is reported as `unpriced`. Closing that properly needs a nullable column or a
 `cost_source`, i.e. a migration — recorded as residual risk in ADR-0006 rather
 than papered over.
 
-**Migrations:** an added table needed a **new RLS wave** (`0012_rls_bom.sql`),
+**Migrations:** an added table needed a **new RLS wave** (`0013_rls_bom.sql`),
 not an edit to `0007_rls.sql`. The generator initially grew 0007, which is
 already applied everywhere; the wave list in `generate-rls.ts` is the correct
 place. Two guards forced the accompanying edits, and both did their job: the RLS
@@ -707,7 +707,7 @@ three distinct problems, and only the first is about speed:
 | Framework-agnostic library | ✅ | `server/lib/algorithms/search.ts` |
 | Arabic + Latin normalization | ✅ | diacritics, alef forms, hamza carriers, maqsura, taa marbuta, tatweel, Arabic-Indic digits, NFKC/NFD |
 | Prefix trie with completions and bounded fuzzy match | ✅ | `SearchTrie`, pruned DP walk |
-| SQL mirror, `IMMUTABLE` | ✅ | `search_normalize()`, migration 0013 |
+| SQL mirror, `IMMUTABLE` | ✅ | `search_normalize()`, migration 0014 |
 | JS/SQL agreement asserted | ✅ | 25 spellings, per-spelling comparison |
 | Indexed columns | ✅ | `products.search_text`, `clients.search_text`, GIN `gin_trgm_ops` |
 | Query builder, LIKE-escaped | ✅ | `src/shared/search-filter.ts` |
@@ -746,6 +746,54 @@ implementations to keep in step.
 other nine search paths still work for exactly-spelled text but carry the same
 two bugs. Migrating them is mechanical; they were left out to keep this slice
 reviewable.
+
+### 17.0h Phase 3 — normalized search extended to every module (DONE)
+
+ADR-0007 left nine services on `lower(col) like '%term%'`. This closes that gap:
+every searchable entity table now has a derived, folded, trigram-indexed
+`search_text` column.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Generator, not eight hand-written blocks | ✅ | `npm run db:generate-search` → migration 0016 |
+| Generator refuses to drift from the schema | ✅ | fails when a declared table lacks `searchText` (reproduced) |
+| Single-table modules | ✅ | client_notes, support_tickets, archive_documents, users |
+| Multi-column module | ✅ | employees: first + last + code + email |
+| Global module | ✅ | tenants (superadmin-scoped, not tenant-filtered) |
+| Search across a JOIN | ✅ | invoices and payments reach `clients.search_text` |
+| e2e coverage of each list method | ✅ | `search-all.e2e.test.ts`, 20 tests |
+
+**Test count:** 398 → 418 (19 files).
+
+**Three migrations were renumbered, because I had created an ordinal collision.**
+`0012_rls_bom` (from §17.0f) sat alongside drizzle-kit's `0012_fancy_wendigo`,
+and the alphabetical tie broke the order: the duplicated `ALTER TABLE clients ADD
+COLUMN search_text` failed with `column "search_text" of relation "clients"
+already exists`. Now `0013_rls_bom`, `0014_search_normalization`,
+`0016_search_columns`, with `0015`/`0017` carrying snapshots. The lesson is
+narrow and worth keeping: **check the highest existing ordinal before naming a
+hand-written migration**; drizzle-kit will happily claim one that hand-written
+files already use.
+
+**`db:generate` cannot see hand-written migrations.** It re-emitted all ten
+`ADD COLUMN`s from `schema.ts`. The fix is not to hide the columns but to make
+the statement harmless: `ADD COLUMN IF NOT EXISTS` in the generator, plus `0017`
+as an empty migration whose only job is to carry the snapshot. A future
+`db:generate` now prints "No schema changes, nothing to migrate".
+
+**The JOIN cases are where this could have been silently wrong.** Copying the
+client's name into the invoice's own derived column would have gone stale on
+every client rename and needed a cross-table trigger on the rename path.
+Instead the client is matched through its own column, in a separate OR branch —
+which means an invoice token and a client token cannot be AND-ed. That is a real
+semantic difference, it is asserted by a test (`دراجة` must not match an invoice
+whose client is `المصطفى`), and it is why `buildSearchFilter` has a distinct
+`normalizedExtras` option: a whole-row column compared per token would match
+`nvidia` in one place and `quadro` in another.
+
+**Benchmark check on multi-column sources:** searching `employees` by the
+*second* column (last name) returns 400 rows. Non-zero is the evidence that the
+trigger concatenates the whole declared row rather than only its first field.
 
 ### 17.1 Agreed sequencing for the next sprints
 
