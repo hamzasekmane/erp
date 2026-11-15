@@ -15,8 +15,26 @@ function extractRows(result: unknown): Array<Record<string, unknown>> {
  * Format: `<PREFIX>-<YYYY>-0001`.
  */
 export async function documentNumber(tenantId: string, docType: string, prefix: string): Promise<string> {
+  return documentNumberTx(getDb(), tenantId, docType, prefix);
+}
+
+/**
+ * Same, but inside a caller's transaction.
+ *
+ * Needed by anything that must be atomic with the row it numbers: the ledger
+ * takes its number from a trigger, but invoice/payment numbering inside an
+ * existing transaction must not open a separate connection, or the sequence
+ * advance would survive a rollback and leave a gap.
+ */
+export async function documentNumberTx(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any,
+  tenantId: string,
+  docType: string,
+  prefix: string,
+): Promise<string> {
   const period = String(new Date().getFullYear());
-  const result = await getDb().execute(sql`
+  const result = await tx.execute(sql`
     insert into number_sequences (tenant_id, doc_type, period, next_value)
     values (${tenantId}, ${docType}, ${period}, 2)
     on conflict (tenant_id, doc_type, period)

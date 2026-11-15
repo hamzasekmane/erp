@@ -2,8 +2,8 @@ import { OpenApiGeneratorV31, OpenAPIRegistry, extendZodWithOpenApi } from "@ast
 import { z } from "zod";
 import { createCheckoutSchema } from "../modules/payments/chargily/chargily.schema";
 import { createClientSchema, updateClientSchema } from "../modules/clients/clients.dto";
-import { createProductSchema, createCategorySchema, createTaxSchema } from "../modules/catalog/catalog.dto";
-import { createInvoiceSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
+import { createProductSchema, createCategorySchema, createTaxSchema, replaceBomSchema } from "../modules/catalog/catalog.dto";
+import { createInvoiceSchema, createPublicLinkSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
 import { createPaymentSchema, gatewaySchema, refundSchema } from "../modules/payments/payments.dto";
 import {
   forgotPasswordSchema,
@@ -129,6 +129,18 @@ register("get", "/client-notes", "Clients", "Notes clients");
 /* catalog */
 register("get", "/products", "Catalog", "Lister les produits", { query: pageQuery, response: listResponse(z.unknown()) });
 register("get", "/products/stats", "Catalog", "Statistiques produits");
+register("get", "/products/stock/valuation", "Catalog", "Valorisation du stock (fifo, lifo, wac, fefo)");
+register("get", "/products/stock/valuation/layers", "Catalog", "Couches de coût par produit");
+register("get", "/products/:id/bom", "Catalog", "Nomenclature d'un produit", { params: idParams });
+register("put", "/products/:id/bom", "Catalog", "Remplacer la nomenclature (refusée entière en cas de cycle)", {
+  params: idParams,
+  body: replaceBomSchema,
+});
+register("delete", "/products/:id/bom/:childId", "Catalog", "Supprimer un composant", { params: idParams });
+register("get", "/products/:id/bom/explosion", "Catalog", "Explosion de la nomenclature", { params: idParams });
+register("get", "/products/:id/bom/requirements", "Catalog", "Besoin net après stock disponible", { params: idParams });
+register("get", "/products/:id/bom/where-used", "Catalog", "Où ce composant est utilisé", { params: idParams });
+register("get", "/products/:id/bom/cost", "Catalog", "Coût déroulé depuis la nomenclature", { params: idParams });
 register("post", "/products", "Catalog", "Créer un produit", { body: createProductSchema });
 register("put", "/products/:id", "Catalog", "Modifier un produit", { params: idParams });
 register("patch", "/products/:id/status", "Catalog", "Activer/désactiver un produit", { params: idParams });
@@ -152,7 +164,10 @@ register("post", "/invoices/:id/duplicate", "Invoices", "Dupliquer une facture",
 register("post", "/invoices/:id/send", "Invoices", "Envoyer une facture", { params: idParams });
 register("post", "/invoices/:id/pay", "Invoices", "Encaisser un paiement", { params: idParams });
 register("get", "/invoices/:id/pdf", "Invoices", "PDF de la facture", { params: idParams });
-register("get", "/invoices/:id/view", "Invoices", "Vue publique", { params: idParams, security: false });
+register("post", "/invoices/:id/public-link", "Invoices", "Créer un lien public (jeton haché, expirant, révocable)", { params: idParams, body: createPublicLinkSchema });
+register("delete", "/invoices/:id/public-link", "Invoices", "Révoquer les liens publics d'une facture", { params: idParams });
+register("get", "/invoices/public/:token", "Invoices", "Vue publique par jeton", { security: false });
+register("get", "/invoices/public/:token/pdf", "Invoices", "PDF public par jeton", { security: false });
 register("delete", "/invoices/:id", "Invoices", "Supprimer une facture", { params: idParams });
 
 /* payments */

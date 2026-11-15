@@ -7,6 +7,7 @@ import { ZodValidationPipe } from "../../shared/validation";
 import { PaymentsService } from "../payments/payments.service";
 import {
   createInvoiceSchema,
+  createPublicLinkSchema,
   invoicePaymentSchema,
   sendInvoiceSchema,
   updateInvoiceSchema,
@@ -160,16 +161,45 @@ export class InvoicesController {
     await this.invoices.streamPdf(id, auth.tenantId, res);
   }
 
+  /* ---------------------------- public links --------------------------- */
+
+  /**
+   * Mints a hashed, expiring, revocable share link for an invoice.
+   * The raw token is returned once and is never retrievable again.
+   */
+  @Post(":id/public-link")
+  @RequirePermissions(PERMISSIONS.invoicesWrite)
+  async createPublicLink(
+    @CurrentAuth() auth: AuthContext,
+    @Req() req: Request,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(createPublicLinkSchema)) body: { expiresInDays?: number },
+  ) {
+    return ok(await this.invoices.createPublicLink(ctx(auth, req), id, body), "Lien public créé");
+  }
+
+  /** Revokes every active share link for an invoice. */
+  @Delete(":id/public-link")
+  @RequirePermissions(PERMISSIONS.invoicesWrite)
+  async revokePublicLinks(@CurrentAuth() auth: AuthContext, @Req() req: Request, @Param("id") id: string) {
+    return ok(await this.invoices.revokePublicLinks(ctx(auth, req), id), "Liens publics révoqués");
+  }
+
+  /**
+   * Anonymous document view. The token is the only credential: it is hashed at
+   * rest, expires, and is revocable. Unknown, expired and revoked tokens all
+   * answer 404 so the endpoint reveals nothing about which invoices exist.
+   */
   @Public()
-  @Get(":id/view")
-  async view(@Param("id") id: string) {
-    return { success: true, data: await this.invoices.publicView(id) };
+  @Get("public/:token")
+  async publicView(@Param("token") token: string) {
+    return ok(await this.invoices.publicViewByToken(token));
   }
 
   @Public()
-  @Get(":id/export/pdf/public")
-  async publicPdf(@Param("id") id: string, @Res() res: Response) {
-    await this.invoices.streamPdf(id, null, res);
+  @Get("public/:token/pdf")
+  async publicPdf(@Param("token") token: string, @Res() res: Response) {
+    await this.invoices.streamPdfByPublicToken(token, res);
   }
 
   @Delete(":id")

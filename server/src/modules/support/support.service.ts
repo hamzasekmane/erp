@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { supportMessages, supportTickets } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate } from "../../shared/http";
 
@@ -17,11 +18,8 @@ export class SupportService {
     const filters: SQL[] = [eq(supportTickets.tenantId, ctx.tenantId)];
     if (query.status) filters.push(eq(supportTickets.status, query.status));
     if (query.priority) filters.push(eq(supportTickets.priority, query.priority));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${supportTickets.subject}) like ${term}`, sql`lower(${supportTickets.description}) like ${term}`);
-      if (search) filters.push(search);
-    }
+    const search = buildSearchFilter(query.search, supportTickets.searchText);
+    if (search) filters.push(search);
     const where = and(...filters);
     const [rows, [countRow]] = await Promise.all([
       db.select().from(supportTickets).where(where).orderBy(desc(supportTickets.createdAt)).limit(query.limit).offset(query.offset),

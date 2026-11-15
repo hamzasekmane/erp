@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import {
@@ -16,10 +16,12 @@ import {
 import { audit } from "../../shared/audit";
 import { secretsConfigured, encryptSecret } from "../../shared/security/secrets";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
+import { LedgerService } from "../ledger/ledger.service";
 import type { CreatePaymentInput, GatewayInput, RefundInput, UpdatePaymentInput } from "./payments.dto";
 
 type Ctx = { tenantId: string; userId: string | null; ip?: string | null; userAgent?: string | null };
@@ -79,6 +81,8 @@ function serializePayment(row: PaymentRow) {
 
 @Injectable()
 export class PaymentsService {
+  constructor(private readonly ledger: LedgerService) {}
+
   async list(ctx: Ctx, query: PaymentListQuery): Promise<{ items: ReturnType<typeof serializePayment>[]; pagination: Pagination }> {
     const db = getDb();
     const filters: SQL[] = [eq(payments.tenantId, ctx.tenantId)];
@@ -91,13 +95,14 @@ export class PaymentsService {
     if (query.minAmount) filters.push(gte(payments.amountMinor, toMinor(Number(query.minAmount))));
     if (query.maxAmount) filters.push(lte(payments.amountMinor, toMinor(Number(query.maxAmount))));
     if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(
-        sql`lower(${payments.number}) like ${term}`,
-        sql`lower(coalesce(${payments.reference}, '')) like ${term}`,
-        sql`lower(coalesce(${clients.name}, '')) like ${term}`,
-        sql`lower(coalesce(${invoices.number}, '')) like ${term}`,
-      );
+      const search = buildSearchFilter(query.search, payments.searchText, {
+        // Payment number and reference are folded into payments.search_text.
+        // The client comes through a JOIN (its own normalized column); the
+        // invoice number is raw because invoices' search_text is whole-row and
+        // mixing it in per token would match on any word of the invoice.
+        normalizedExtras: [clients.searchText],
+        extras: [sql`lower(coalesce(${invoices.number}, ''))`],
+      });
       if (search) filters.push(search);
     }
     const where = and(...filters);
@@ -143,6 +148,8 @@ export class PaymentsService {
     const amountMinor = toMinor(input.amount);
     if (amountMinor <= 0) throw AppError.badRequest("Le montant doit être supérieur à zéro");
 
+    // Read for the cheap precondition checks only. The authoritative check is
+    // the row lock taken inside the transaction below.
     const [invoice] = await db
       .select()
       .from(invoices)
@@ -164,11 +171,44 @@ export class PaymentsService {
     const paymentId = newId();
     let number = await documentNumber(ctx.tenantId, "payment", "PAY");
     const paidAt = input.paidAt ? new Date(input.paidAt) : new Date();
-    const nextPaid = Number(invoice.paidMinor) + amountMinor;
-    const nextDue = Number(invoice.totalMinor) - nextPaid;
-    const nextStatus = nextDue <= 0 ? "paid" : "partially_paid";
 
     const writePayment = async () => db.transaction(async (tx) => {
+      // Lock the invoice row for the duration of the transaction so concurrent
+      // settlements serialise. Re-reading under the lock is what makes the
+      // overpayment check correct: the value observed before the lock may be
+      // stale. Without this, two parallel payments both validated against the
+      // same balance and the second write overwrote the first (lost update).
+      const locked = (await tx.execute(
+        sql`select id, status, total_minor, paid_minor, due_minor
+              from invoices
+             where id = ${invoice.id} and tenant_id = ${ctx.tenantId}
+             for update`,
+      )) as unknown as { rows?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
+      const lockedRows = Array.isArray(locked) ? locked : (locked.rows ?? []);
+      const current = lockedRows[0];
+      if (!current) throw AppError.notFound("Facture introuvable");
+
+      const currentPaid = Number(current.paid_minor);
+      const currentTotal = Number(current.total_minor);
+      const currentDue = Number(current.due_minor);
+      const currentStatus = String(current.status);
+
+      if (currentStatus === "cancelled") throw AppError.unprocessable("INVOICE_CANCELLED", "Cette facture est annulée.");
+      if (currentStatus === "draft") throw AppError.unprocessable("INVOICE_DRAFT", "Émettez la facture avant d'enregistrer un paiement.");
+      if (currentDue <= 0 || currentStatus === "paid") {
+        throw AppError.unprocessable("INVOICE_ALREADY_PAID", "Cette facture est déjà soldée.");
+      }
+      if (amountMinor > currentDue) {
+        throw AppError.unprocessable("PAYMENT_EXCEEDS_DUE", "Le montant dépasse le solde restant dû.", {
+          due: fromMinor(currentDue),
+          maxPayable: fromMinor(currentDue),
+        });
+      }
+
+      const nextPaid = currentPaid + amountMinor;
+      const nextDue = currentTotal - nextPaid;
+      const nextStatus = nextDue <= 0 ? "paid" : "partially_paid";
+
       await tx.insert(payments).values({
         id: paymentId,
         tenantId: ctx.tenantId,
@@ -190,17 +230,37 @@ export class PaymentsService {
         invoiceId: invoice.id,
         amountMinor,
       });
-      await tx
+      // Conditional on the balance we just read: even if the lock were ever
+      // bypassed, this update cannot apply a stale absolute value.
+      const settled = await tx
         .update(invoices)
         .set({ paidMinor: nextPaid, dueMinor: nextDue, status: nextStatus, updatedAt: new Date() })
-        .where(eq(invoices.id, invoice.id));
+        .where(and(eq(invoices.id, invoice.id), eq(invoices.paidMinor, currentPaid)))
+        .returning({ id: invoices.id });
+      if (settled.length === 0) {
+        throw AppError.conflict("CONCURRENT_MODIFICATION", "La facture a été modifiée entre-temps, réessayez.");
+      }
       await tx.insert(invoiceStatusHistory).values({
         id: newId(),
         invoiceId: invoice.id,
-        fromStatus: invoice.status,
+        fromStatus: currentStatus,
         toStatus: nextStatus,
         actorId: ctx.userId,
         reason: `Paiement ${number}`,
+      });
+
+      // Posted in the same transaction as the settlement: a payment can never
+      // exist without the entry that records the cash arriving.
+      await this.ledger.postPayment(tx, {
+        tenantId: ctx.tenantId,
+        paymentId,
+        paymentNumber: number,
+        entryDate: paidAt.toISOString().slice(0, 10),
+        amountMinor,
+        // The payment method decides cash vs bank. Unknown methods (mobile
+        // money, cheques) settle to bank: they are not physical cash.
+        accountKind: input.method.toUpperCase() === "CASH" ? "cash" : "bank",
+        createdBy: ctx.userId,
       });
     });
 

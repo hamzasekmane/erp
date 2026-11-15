@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { invoiceService } from "@/app/services/invoice.service";
 import InvoiceDownloadBtn from "@/app/components/InvoiceDownloadBtn";
+import PublicLinkButton from "@/app/components/invoices/PublicLinkButton";
 import QuickPayButton from "@/app/components/QuickPayButton";
 import SendEmailButton from "@/app/components/SendEmailButton";
 import { 
@@ -114,6 +115,7 @@ export default async function InvoiceDetailPage({
             invoiceNumber={invoice.invoiceNumber} 
             token={token} 
           />
+          <PublicLinkButton invoiceId={invoice._id} invoiceNumber={invoice.invoiceNumber} />
           <SendEmailButton id={invoice._id} disabled={!clientEmail} />
         </div>
       </div>

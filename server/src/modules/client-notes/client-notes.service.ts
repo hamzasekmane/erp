@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { clientNotes } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate } from "../../shared/http";
 
@@ -19,11 +20,8 @@ export class ClientNotesService {
     const filters: SQL[] = [eq(clientNotes.tenantId, ctx.tenantId), isNull(clientNotes.deletedAt)];
     if (query.clientId) filters.push(eq(clientNotes.clientId, query.clientId));
     if (query.type && (CATEGORIES as readonly string[]).includes(query.type)) filters.push(eq(clientNotes.category, query.type));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${clientNotes.title}) like ${term}`, sql`lower(${clientNotes.content}) like ${term}`);
-      if (search) filters.push(search);
-    }
+    const search = buildSearchFilter(query.search, clientNotes.searchText);
+    if (search) filters.push(search);
     const where = and(...filters);
     const [rows, [countRow]] = await Promise.all([
       db.select().from(clientNotes).where(where).orderBy(desc(clientNotes.isPinned), desc(clientNotes.createdAt)).limit(query.limit).offset(query.offset),

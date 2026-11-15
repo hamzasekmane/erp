@@ -31,6 +31,20 @@ const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull(
 const deletedAt = () => timestamp("deleted_at", { withTimezone: true });
 const money = (name: string) => bigint(name, { mode: "number" }).notNull().default(0);
 
+/**
+ * Normalized search text, kept in sync by a database trigger (migration 0013).
+ *
+ * It exists so that search can use a trigram index: `lower(name) like '%x%'`
+ * cannot use any index, and Arabic spellings must be folded BEFORE indexing
+ * because pg_trgm scores `دراجة` against `دراجه` at 0.53, not 1. The trigger
+ * owns the value — application code must never write it, or the column and the
+ * name it is derived from would disagree after the first UPDATE that forgets.
+ *
+ * Declared here so Drizzle can select it; the trigger is the only writer.
+ */
+const searchText = () => text("search_text");
+
+
 /* ------------------------------------------------------------------ */
 /* Tenancy                                                             */
 /* ------------------------------------------------------------------ */
@@ -42,6 +56,8 @@ export const tenants = pgTable(
     name: text("name").notNull(),
     subdomain: text("subdomain").notNull(),
     email: text("email").notNull(),
+    /** Derived and index-backed; written by the tenants_search_text_trg trigger. */
+    searchText: searchText(),
     phone: text("phone"),
     address: text("address"),
     city: text("city"),
@@ -104,6 +120,8 @@ export const users = pgTable(
     email: text("email").notNull(),
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
+    /** Derived and index-backed; written by the users_search_text_trg trigger. */
+    searchText: searchText(),
     role: text("role").notNull().default("user"),
     status: text("status").notNull().default("active"),
     avatarUrl: text("avatar_url"),
@@ -256,6 +274,8 @@ export const clients = pgTable(
     tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
     code: text("code").notNull(),
     name: text("name").notNull(),
+    /** Derived and index-backed; written by the clients_search_text_trg trigger. */
+    searchText: searchText(),
     type: text("type").notNull().default("individual"),
     category: text("category").notNull().default("regular"),
     email: text("email"),
@@ -335,6 +355,8 @@ export const clientNotes = pgTable(
       .references(() => clients.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     content: text("content").notNull().default(""),
+    /** Derived and index-backed; written by the client_notes_search_text_trg trigger. */
+    searchText: searchText(),
     category: text("category").notNull().default("general"),
     isPinned: boolean("is_pinned").notNull().default(false),
     createdBy: text("created_by"),
@@ -410,6 +432,8 @@ export const products = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     createdBy: text("created_by"),
     legacyId: text("legacy_id"),
+    /** Derived and index-backed; written by the products_search_text_trg trigger. */
+    searchText: searchText(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -432,7 +456,48 @@ export const stockLevels = pgTable(
     quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull().default("0"),
     updatedAt: updatedAt(),
   },
-  (t) => [index("stock_levels_tenant_idx").on(t.tenantId)],
+  (t) => [
+    index("stock_levels_tenant_idx").on(t.tenantId),
+    // Stock can never go negative; enforced by the DB, not just the service.
+    check("stock_levels_quantity_chk", sql`${t.quantity} >= 0`),
+  ],
+);
+
+/**
+ * Bill of materials: one row is "one unit of `parentId` needs `quantity` of
+ * `childId`". Quantities are numeric(18,3) to match stock_levels, so a BOM can
+ * call for 2.5 m of cable without special casing.
+ *
+ * The graph is validated in the application (lib/algorithms/bom.ts); the
+ * database enforces the two invariants it can express cheaply: no self
+ * reference, and no duplicate parent/child pair. A duplicate would silently
+ * mean something different (sum vs replace) depending on the code path, so it
+ * is rejected rather than added up.
+ */
+export const bomLines = pgTable(
+  "bom_lines",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    parentId: text("parent_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    childId: text("child_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull(),
+    /** Scrap allowance in basis points: 500 = 5% extra is consumed. */
+    scrapBp: integer("scrap_bp").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("bom_lines_edge_uq").on(t.tenantId, t.parentId, t.childId),
+    index("bom_lines_child_idx").on(t.tenantId, t.childId),
+    check("bom_lines_quantity_chk", sql`${t.quantity} > 0`),
+    check("bom_lines_scrap_chk", sql`${t.scrapBp} >= 0 and ${t.scrapBp} <= 10000`),
+    check("bom_lines_no_self_ref_chk", sql`${t.parentId} <> ${t.childId}`),
+  ],
 );
 
 export const stockMovements = pgTable(
@@ -479,6 +544,8 @@ export const invoices = pgTable(
     id: id(),
     tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
     number: text("number").notNull(),
+    /** Derived and index-backed; written by the invoices_search_text_trg trigger. */
+    searchText: searchText(),
     clientId: text("client_id")
       .notNull()
       .references(() => clients.id),
@@ -578,6 +645,8 @@ export const payments = pgTable(
     id: id(),
     tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
     number: text("number").notNull(),
+    /** Derived and index-backed; written by the payments_search_text_trg trigger. */
+    searchText: searchText(),
     clientId: text("client_id").references(() => clients.id),
     invoiceId: text("invoice_id").references(() => invoices.id),
     amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
@@ -868,6 +937,8 @@ export const employees = pgTable(
     code: text("code").notNull(),
     firstName: text("first_name").notNull(),
     lastName: text("last_name").notNull(),
+    /** Derived and index-backed; written by the employees_search_text_trg trigger. */
+    searchText: searchText(),
     email: text("email"),
     phone: text("phone"),
     departmentId: text("department_id").references(() => departments.id),
@@ -972,6 +1043,8 @@ export const supportTickets = pgTable(
     userId: text("user_id"),
     subject: text("subject").notNull(),
     description: text("description").notNull().default(""),
+    /** Derived and index-backed; written by the support_tickets_search_text_trg trigger. */
+    searchText: searchText(),
     category: text("category").notNull().default("other"),
     priority: text("priority").notNull().default("medium"),
     status: text("status").notNull().default("open"),
@@ -1012,6 +1085,8 @@ export const archiveDocuments = pgTable(
     name: text("name").notNull(),
     category: text("category").notNull().default("other"),
     description: text("description"),
+    /** Derived and index-backed; written by the archive_documents_search_text_trg trigger. */
+    searchText: searchText(),
     fileUrl: text("file_url"),
     mime: text("mime"),
     size: integer("size").notNull().default(0),
@@ -1045,5 +1120,201 @@ export const uploads = pgTable(
     index("uploads_tenant_created_idx").on(t.tenantId, t.createdAt),
     check("uploads_kind_chk", sql`${t.kind} in ('logo','document','attachment','import')`),
     check("uploads_scan_status_chk", sql`${t.scanStatus} in ('clean','infected','skipped','error')`),
+  ],
+);
+
+/* ------------------------------------------------------------------ */
+/* Ledger (double-entry)                                               */
+/* ------------------------------------------------------------------ */
+/*
+ * Contract: docs/adr/0004-ledger.md
+ *
+ * 1. Every business event that moves money posts a balanced journal. The
+ *    posting happens in the SAME transaction as the business write, so there is
+ *    no window where an invoice exists without its entry.
+ * 2. Journals are IMMUTABLE. There is no update and no delete: a mistake is
+ *    corrected by posting a reversal that references the original. Enforced by
+ *    triggers below, not by service discipline.
+ * 3. Debits must equal credits. Enforced by the domain (posting fails before
+ *    writing) AND by a DEFERRABLE constraint trigger that fires at COMMIT, so
+ *    multi-statement postings are supported while nothing unbalanced can ever
+ *    become visible.
+ * 4. Accounts are tenant-defined and hierarchical via a CLOSURE TABLE, which
+ *    makes ancestor/descendant queries single joins and makes cycles
+ *    impossible to represent.
+ */
+
+/**
+ * Account hierarchy as a closure table.
+ *
+ * Each row is (ancestor, descendant, depth). Every node has a self-row
+ * (depth 0). This representation is chosen over a parent pointer because the
+ * trial balance and every report aggregate over SUBTREES: with a closure table
+ * "all accounts under 512" is one indexed join, while a parent pointer needs a
+ * recursive CTE per query.
+ *
+ * Cycles are structurally impossible: inserting an edge would require a path
+ * from descendant back to ancestor, which the writer checks before inserting.
+ */
+export const accountClosure = pgTable(
+  "account_closure",
+  {
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    ancestorId: text("ancestor_id").notNull(),
+    descendantId: text("descendant_id").notNull(),
+    depth: integer("depth").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.ancestorId, t.descendantId] }),
+    index("account_closure_descendant_idx").on(t.tenantId, t.descendantId),
+    check("account_closure_depth_chk", sql`${t.depth} >= 0`),
+    check("account_closure_self_chk", sql`(${t.depth} = 0) = (${t.ancestorId} = ${t.descendantId})`),
+  ],
+);
+
+/**
+ * The chart of accounts.
+ *
+ * `code` is the tenant's own numbering (SCF-style "512" etc.) and is unique per
+ * tenant. `parentId` is kept for readability and for the UI; the closure table
+ * is the authoritative structure used by queries.
+ */
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /** Asset, liability, equity, revenue, expense — drives sign conventions. */
+    type: text("type").notNull(),
+    /** Normal balance: 'debit' (assets, expenses) or 'credit' (liab, equity, revenue). */
+    normalBalance: text("normal_balance").notNull(),
+    parentId: text("parent_id"),
+    isPostable: boolean("is_postable").notNull().default(true),
+    isActive: boolean("is_active").notNull().default(true),
+    /** Marks the accounts the posting engine looks up by role, never by code. */
+    systemRole: text("system_role"),
+    description: text("description"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
+  },
+  (t) => [
+    uniqueIndex("accounts_tenant_code_uq").on(t.tenantId, t.code).where(sql`${t.deletedAt} is null`),
+    // At most one account per system role per tenant: posting resolves a role,
+    // not a hardcoded code, so the chart stays replaceable.
+    uniqueIndex("accounts_tenant_system_role_uq")
+      .on(t.tenantId, t.systemRole)
+      .where(sql`${t.systemRole} is not null and ${t.deletedAt} is null`),
+    index("accounts_tenant_type_idx").on(t.tenantId, t.type),
+    check(
+      "accounts_type_chk",
+      sql`${t.type} in ('asset','liability','equity','revenue','expense')`,
+    ),
+    check("accounts_normal_balance_chk", sql`${t.normalBalance} in ('debit','credit')`),
+  ],
+);
+
+/**
+ * A journal entry: the unit of posting. Immutable once written.
+ */
+export const journalEntries = pgTable(
+  "journal_entries",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    number: text("number").notNull(),
+    /** Accounting date the entry belongs to; drives period locking. */
+    entryDate: date("entry_date").notNull(),
+    /** Draft, posted, reversed. Only 'posted' affects the trial balance. */
+    status: text("status").notNull().default("posted"),
+    /** What caused this entry: 'invoice', 'payment', 'manual', 'reversal'... */
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id"),
+    memo: text("memo"),
+    /** True when this entry is itself a reversal of another entry. */
+    isReversal: boolean("is_reversal").notNull().default(false),
+    /** Set on the entry that reverses another: the id of the reversed entry. */
+    reversesEntryId: text("reverses_entry_id"),
+    /** Set on the ORIGINAL entry once it has been reversed; never deleted. */
+    reversedByEntryId: text("reversed_by_entry_id"),
+    postedAt: timestamp("posted_at", { withTimezone: true }),
+    createdBy: text("created_by"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("journal_entries_tenant_number_uq").on(t.tenantId, t.number),
+    index("journal_entries_tenant_date_idx").on(t.tenantId, t.entryDate),
+    index("journal_entries_source_idx").on(t.tenantId, t.sourceType, t.sourceId),
+    index("journal_entries_reverses_idx").on(t.tenantId, t.reversesEntryId),
+    check("journal_entries_status_chk", sql`${t.status} in ('draft','posted','reversed')`),
+    check(
+      "journal_entries_reversal_chk",
+      sql`(${t.isReversal} = false and ${t.reversesEntryId} is null) or (${t.isReversal} = true and ${t.reversesEntryId} is not null)`,
+    ),
+    // An entry cannot reverse itself.
+    check("journal_entries_no_self_reversal_chk", sql`${t.reversesEntryId} is distinct from ${t.id}`),
+  ],
+);
+
+/**
+ * Journal lines. Debits and credits are separate non-negative columns rather
+ * than one signed amount: a signed column makes "debits = credits" a tautology
+ * that cannot be violated, which would hide the error we want to catch.
+ */
+export const journalLines = pgTable(
+  "journal_lines",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    entryId: text("entry_id")
+      .notNull()
+      .references(() => journalEntries.id, { onDelete: "restrict" }),
+    lineNumber: integer("line_number").notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "restrict" }),
+    debitMinor: money("debit_minor"),
+    creditMinor: money("credit_minor"),
+    memo: text("memo"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("journal_lines_entry_line_uq").on(t.entryId, t.lineNumber),
+    index("journal_lines_account_idx").on(t.tenantId, t.accountId),
+    check("journal_lines_debit_credit_chk", sql`${t.debitMinor} >= 0 and ${t.creditMinor} >= 0`),
+    // A line is exactly one of a debit or a credit, never both, never neither.
+    check(
+      "journal_lines_one_sided_chk",
+      sql`(${t.debitMinor} > 0 and ${t.creditMinor} = 0) or (${t.creditMinor} > 0 and ${t.debitMinor} = 0)`,
+    ),
+  ],
+);
+
+/**
+ * Accounting periods. A locked period refuses new postings, so a closed month
+ * cannot change. Seams only: this table and manual journals are the only ways
+ * to affect the ledger outside a business event.
+ */
+export const accountingPeriods = pgTable(
+  "accounting_periods",
+  {
+    id: id(),
+    tenantId: tenantId().references(() => tenants.id, { onDelete: "cascade" }),
+    /** '2026-01' style period key. */
+    period: text("period").notNull(),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    status: text("status").notNull().default("open"),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lockedBy: text("locked_by"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("accounting_periods_tenant_period_uq").on(t.tenantId, t.period),
+    check("accounting_periods_status_chk", sql`${t.status} in ('open','locked')`),
+    check("accounting_periods_range_chk", sql`${t.endDate} >= ${t.startDate}`),
   ],
 );

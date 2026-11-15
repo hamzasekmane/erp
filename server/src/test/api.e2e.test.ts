@@ -1,6 +1,7 @@
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { resetRegistrations } from "./db-cleanup";
 import { closeTestApp, createTestApp } from "./app";
 import { totpCode } from "../shared/security/totp";
 import { sql } from "drizzle-orm";
@@ -24,6 +25,8 @@ const tenantB = {
 
 beforeAll(async () => {
   app = await createTestApp();
+  // After createTestApp(): the database handle does not exist before initDb().
+  await resetRegistrations(["admin@alpha.dz", "admin@beta.dz", "admin@gamma.dz"]);
   http = request(app.getHttpServer());
 });
 
@@ -133,6 +136,10 @@ describe("clients, invoices and payments", () => {
     expect(res.body.data.stock).toBe(50);
   });
 
+  // VAT must be charged on the NET (post-discount) taxable base.
+  // 2 x 100.00 = 200.00, 10 % line discount -> 180.00 base, 19 % VAT -> 34.20
+  // invoice discount 5.00 -> taxable base 175.00, VAT relief 0.95 -> 33.25
+  // total = 175.00 + 20.00 shipping + 33.25 = 228.25
   it("issues an invoice and computes totals in minor units", async () => {
     const res = await http
       .post("/api/invoices")
@@ -147,8 +154,8 @@ describe("clients, invoices and payments", () => {
       .expect(201);
     invoiceA = res.body.data._id;
     expect(res.body.data.subtotal).toBe(180);
-    expect(res.body.data.taxAmount).toBe(34.2);
-    expect(res.body.data.total).toBe(229.2);
+    expect(res.body.data.taxAmount).toBe(33.25);
+    expect(res.body.data.total).toBe(228.25);
     expect(res.body.data.status).toBe("sent");
     expect(res.body.data.invoiceNumber).toMatch(/^FA-\d{4}-\d{4}$/);
   });
@@ -163,7 +170,7 @@ describe("clients, invoices and payments", () => {
 
     const invoice = await http.get(`/api/invoices/${invoiceA}`).set("Authorization", `Bearer ${tokenA}`).expect(200);
     expect(invoice.body.data.paidAmount).toBe(100);
-    expect(invoice.body.data.balance).toBeCloseTo(129.2, 2);
+    expect(invoice.body.data.balance).toBeCloseTo(128.25, 2);
     expect(invoice.body.data.status).toBe("partially_paid");
   });
 

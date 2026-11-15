@@ -9,9 +9,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # API: typecheck -> test -> build -> dependency audit -> OpenAPI drift
+  # ---------------------------------------------------------------------------
   api:
-    name: API — types, tests, contrat
+    name: API — types, tests, audit, contrat
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,13 +42,105 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: "Dependency audit (runtime: fail on high/critical)"
+        # Dev-only advisories (vitest, drizzle-kit) do not ship in the image,
+        # so the gate covers production dependencies.
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Contrat OpenAPI à jour
         run: |
           npm run openapi
           git diff --exit-code -- ../docs/openapi.json
 
+  # ---------------------------------------------------------------------------
+  # API against a REAL PostgreSQL server.
+  #
+  # The `api` job runs on PGlite (PostgreSQL compiled to WASM). It is a faithful
+  # SQL engine but its connection is a superuser, so several things that matter
+  # in production are simply not exercised there. Running the same suite against
+  # a real server found three defects that PGlite could not fail on:
+  #
+  #   * `pg_trgm` is absent unless contrib is installed, so the search suites
+  #     skipped silently instead of testing anything;
+  #   * registration wrote a tenant with no RLS context, which a superuser
+  #     tolerates and a real deployment does not;
+  #   * the suite was not re-runnable against one database.
+  #
+  # `postgres:16-alpine` ships contrib, so `pg_trgm` and `normalize()` need no
+  # build step. The suite runs twice on purpose: a developer will, and a leftover
+  # row from run 1 should not be the reason run 2 fails.
+  #
+  # SCOPE NOTE — this job connects as the superuser. Running the whole suite as a
+  # NON-superuser role is the configuration that found the RLS defects above, but
+  # it cannot be the default here: most suites seed child tables directly
+  # (`tenant_settings`, `clients`, ...) rather than going through the application,
+  # and those inserts are correctly refused under real RLS. Making them all
+  # RLS-aware is a fixture rewrite, not a CI change, and it is recorded as
+  # outstanding work in docs/audit/AUDIT.md §17 rather than faked here by
+  # weakening the policies. The RLS *behaviour* itself is covered by
+  # rls.e2e.test.ts, which switches to the application role explicitly with
+  # `set local role erp_app` and was verified to fail when a policy is dropped.
+  # ---------------------------------------------------------------------------
+  api-postgres:
+    name: API — PostgreSQL réel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/erp_ci
+      MIGRATION_DATABASE_URL: postgres://postgres:postgres@localhost:5432/erp_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Create a fresh database
+        # A fresh database per run, so a failure is never leftover state.
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE erp_ci"
+
+      - name: Confirm pg_trgm is available
+        # The search suites SKIP when `create extension pg_trgm` fails, which
+        # looks like a pass. Assert it up front so a missing contrib is loud.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d erp_ci -v ON_ERROR_STOP=1             -c "CREATE EXTENSION IF NOT EXISTS pg_trgm" \
+            -c "SELECT similarity('دراجة هوائية', 'دراجه هوائيه') AS arabic_similarity"
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Tests (PostgreSQL 16)
+        run: npm test
+
+      - name: Tests are re-runnable against the same database
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # Web: typecheck -> build -> dependency audit
+  # ---------------------------------------------------------------------------
   web:
-    name: Frontend — build
+    name: Web — types, build, audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,26 +153,160 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
+      # Typecheck runs BEFORE build so type regressions surface first and the
+      # failing step is unambiguous.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
       - name: Build (standalone)
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: /api
           NEXT_TELEMETRY_DISABLED: "1"
 
-      - name: Typecheck
-        run: npx tsc --noEmit
+      - name: "Dependency audit (runtime: fail on high/critical)"
+        # KNOWN FAILURE (tracked backlog, see docs/audit/AUDIT.md §H5):
+        # xlsx@0.18.5 has two unfixed advisories and no patched release on npm.
+        # The remedy is to move Excel export server-side and drop the
+        # dependency. Until then this step is expected to fail on xlsx only.
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
 
+  # ---------------------------------------------------------------------------
+  # ESLint: tracked backlog, NOT a gate yet
+  # ---------------------------------------------------------------------------
+  # The repository currently has 475 ESLint errors (273 x
+  # react-hooks/error-boundaries, 156 x react/no-unescaped-entities, ...).
+  # Gating on them today would block every pull request. The count is reported
+  # on each run so the burndown is visible, and the step becomes blocking once
+  # the error count reaches zero. Tracked in docs/audit/AUDIT.md §8.1.
+  lint-report:
+    name: ESLint — non-blocking backlog report
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Count lint errors
+        run: |
+          set +e
+          npx eslint . -f json -o eslint-report.json
+          node -e "
+            const report = require('./eslint-report.json');
+            let errors = 0, warnings = 0;
+            const byRule = {};
+            for (const file of report) for (const m of file.messages) {
+              if (m.severity === 2) { errors++; byRule[m.ruleId] = (byRule[m.ruleId] || 0) + 1; }
+              else warnings++;
+            }
+            console.log('ESLint errors:', errors, '| warnings:', warnings);
+            console.log('Top rules:');
+            Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,10)
+              .forEach(([rule, n]) => console.log('  ', n, rule));
+          "
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eslint-report
+          path: eslint-report.json
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Container images
+  # ---------------------------------------------------------------------------
   docker:
-    name: Image Docker
+    name: Images Docker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build
+
+      - name: Build API image
         uses: docker/build-push-action@v6
         with:
           context: ./server
           push: false
           tags: erp-api:ci
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: erp-web:ci
+          load: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=/api
+            API_PROXY_TARGET=
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The scans write JSON so the gate can be explicit about severity and so
+      # every finding can be surfaced as a check annotation (visible inline on
+      # the PR) instead of being buried in a log that may not be retrievable.
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: erp-api:ci
+          format: json
+          output: trivy-api.json
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Scan web image
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: erp-web:ci
+          format: json
+          output: trivy-web.json
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      # Gate: no CRITICAL may ship. HIGH is reported but does not block while
+      # the backlog is burned down - see docs/audit/AUDIT.md. Every finding is
+      # annotated with its CVE, package and fixed version so it is actionable.
+      - name: Evaluate vulnerability gate
+        if: always()
+        run: |
+          set -euo pipefail
+          status=0
+          for image in api web; do
+            report="trivy-${image}.json"
+            if [ ! -s "$report" ]; then
+              echo "::warning title=trivy::no report produced for the ${image} image"
+              continue
+            fi
+            crit=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$report")
+            high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$report")
+            echo "${image}: ${crit} critical, ${high} high"
+            jq -r '.Results[]?.Vulnerabilities[]? |
+              "::error title=\(.VulnerabilityID) (\(.Severity))::\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion // "no fix")\n\(.Title // "")"' "$report" || true
+            { echo "### ${image} image vulnerabilities"; echo "${crit} critical, ${high} high"; } >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.Results[]?.Vulnerabilities[]? | "- `\(.VulnerabilityID)` \(.Severity) — \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix")"' "$report" >> "$GITHUB_STEP_SUMMARY" || true
+            if [ "$crit" -gt 0 ]; then
+              echo "::error title=CRITICAL vulnerabilities in ${image} image::${crit} critical findings block this build"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Upload vulnerability reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports
+          path: trivy-*.json
+          if-no-files-found: warn

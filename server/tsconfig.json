@@ -12,10 +12,20 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "sourceMap": true,
-    "types": ["node", "multer"]
+    "types": ["node", "multer"],
+    // moduleResolution "node" predates package "exports" maps, so the contrib
+    // subpath PGlite ships for pg_trgm is invisible to the compiler even though
+    // Node resolves it at runtime. An explicit path is preferable to switching
+    // the whole project to "bundler" for one import.
+    "paths": {
+      "@electric-sql/pglite/contrib/pg_trgm": ["./node_modules/@electric-sql/pglite/dist/contrib/pg_trgm"]
+    }
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+  // `lib/` holds the framework-agnostic algorithm library (Phase 3). It compiles
+  // with the service so there is one tsconfig and no build-order coupling;
+  // output lands in dist/src and dist/lib.
+  "include": ["src/**/*.ts", "lib/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "lib/**/*.test.ts"]
 }

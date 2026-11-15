@@ -153,19 +153,59 @@ export class DateRangeHelper {
 export const invoiceService = {
   
   // 1. PUBLIC ROUTES
-  async getPublicInvoice(id: string) {
+  //
+  // Public access is authorised by a share token, never by the invoice id.
+  // Tokens are hashed at rest, expire, and are revocable, so a leaked URL stops
+  // working. Unknown, expired and revoked tokens all return 404.
+  async getPublicInvoice(token: string) {
     try {
-      const res = await fetch(`${API_URL}/invoices/${id}/view`, { method: "GET", cache: "no-store" });
+      const res = await fetch(`${API_URL}/invoices/public/${encodeURIComponent(token)}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (res.status === 404) {
+        return {
+          success: false as const,
+          error_code: "NOT_FOUND",
+          message: "Lien invalide ou expiré",
+          data: null,
+        };
+      }
       return await res.json();
-    } catch (error) {
-      return { success: false, message: "Erreur de connexion" };
+    } catch {
+      return { success: false as const, message: "Erreur de connexion", data: null };
     }
   },
 
-  async downloadPublicPdf(id: string) {
-    const res = await fetch(`${API_URL}/invoices/${id}/export/pdf/public`);
+  async downloadPublicPdf(token: string) {
+    const res = await fetch(`${API_URL}/invoices/public/${encodeURIComponent(token)}/pdf`, { cache: "no-store" });
     if (!res.ok) throw new Error("Erreur PDF Public");
     return res.blob();
+  },
+
+  /** Mints a share link. The token is returned once and cannot be retrieved again. */
+  async createPublicLink(invoiceId: string, token: string, expiresInDays?: number) {
+    const res = await fetch(`${API_URL}/invoices/${invoiceId}/public-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(expiresInDays ? { expiresInDays } : {}),
+      cache: "no-store",
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message ?? "Impossible de créer le lien");
+    return json.data as { token: string; url: string; expiresAt: string };
+  },
+
+  /** Revokes every active share link for an invoice. */
+  async revokePublicLinks(invoiceId: string, token: string) {
+    const res = await fetch(`${API_URL}/invoices/${invoiceId}/public-link`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.message ?? "Impossible de révoquer le lien");
+    return json.data as { revoked: number };
   },
 
   // 2. PROTECTED READ ROUTES

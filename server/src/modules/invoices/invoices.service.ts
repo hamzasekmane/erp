@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import type { Response } from "express";
@@ -7,6 +8,7 @@ import { getDb } from "../../db/client";
 import {
   clients,
   invoiceItems,
+  invoicePublicTokens,
   invoiceStatusHistory,
   invoices,
   notifications,
@@ -17,12 +19,34 @@ import {
 } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
-import { fromMinor, roundHalfUp, toMinor } from "../../shared/money";
+import {
+  MoneyError,
+  fromMinor,
+  invoiceTotals,
+  percentToBp,
+  toMinor,
+  toMinorStrict,
+  type InvoiceTotals as Totals,
+  type LineAmounts,
+} from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
+import { hashToken } from "../../shared/security/tokens";
+import { LedgerService } from "../ledger/ledger.service";
 import { PaymentsService } from "../payments/payments.service";
 import type { CreateInvoiceInput, InvoiceItemInput, SendInvoiceInput, UpdateInvoiceInput } from "./invoices.dto";
+
+/** Public links are short-lived by default and capped so they cannot be eternal. */
+export const PUBLIC_LINK_MIN_DAYS = 1;
+export const PUBLIC_LINK_MAX_DAYS = 90;
+export const PUBLIC_LINK_DEFAULT_DAYS = 30;
+
+function clampDays(days: number | undefined): number {
+  if (!Number.isFinite(days ?? Number.NaN)) return PUBLIC_LINK_DEFAULT_DAYS;
+  return Math.min(PUBLIC_LINK_MAX_DAYS, Math.max(PUBLIC_LINK_MIN_DAYS, Math.trunc(days as number)));
+}
 
 type Ctx = { tenantId: string; userId: string; ip?: string | null; userAgent?: string | null };
 
@@ -51,39 +75,57 @@ type InvoiceRow = {
   clientCode: string | null;
 };
 
-type ComputedLine = {
-  input: InvoiceItemInput;
-  lineBaseMinor: number;
-  taxMinor: number;
-  lineTotalMinor: number;
-};
-
 function ymd(value: Date | string): string {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-function computeLines(items: InvoiceItemInput[]): {
-  lines: ComputedLine[];
-  subtotalMinor: number;
-  taxMinor: number;
-} {
-  let subtotalMinor = 0;
-  let taxMinor = 0;
-  const lines = items.map((input) => {
-    const gross = roundHalfUp(input.quantity * toMinor(input.unitPrice));
-    const discountAmount = roundHalfUp((gross * input.discount) / 100);
-    const lineBaseMinor = gross - discountAmount;
-    const lineTaxMinor = roundHalfUp((lineBaseMinor * input.taxRate) / 100);
-    subtotalMinor += lineBaseMinor;
-    taxMinor += lineTaxMinor;
-    return { input, lineBaseMinor, taxMinor: lineTaxMinor, lineTotalMinor: lineBaseMinor + lineTaxMinor };
-  });
-  return { lines, subtotalMinor, taxMinor };
+/**
+ * Adapts validated DTOs to the single money implementation in
+ * `shared/money.ts`. Percentages are converted to basis points exactly once,
+ * here, and invalid precision is rejected with a field-level 400 rather than
+ * being silently rounded.
+ */
+function computeInvoiceTotals(input: {
+  items: InvoiceItemInput[];
+  discount?: number;
+  shipping?: number;
+}): Totals {
+  try {
+    return invoiceTotals({
+      items: input.items.map((item, index) => ({
+        quantity: item.quantity,
+        unitPriceMinor: toMinorStrict(item.unitPrice, `items[${index}].unitPrice`),
+        discountBp: percentToBp(item.discount, `items[${index}].discount`),
+        taxRateBp: percentToBp(item.taxRate, `items[${index}].taxRate`),
+      })),
+      globalDiscountMinor: toMinorStrict(input.discount ?? 0, "discount"),
+      shippingMinor: toMinorStrict(input.shipping ?? 0, "shipping"),
+    });
+  } catch (error) {
+    if (error instanceof MoneyError) {
+      throw AppError.badRequest(error.message, [{ field: error.field, message: error.message }]);
+    }
+    throw error;
+  }
+}
+
+/** Line input paired with its computed amounts, in insertion order. */
+type ComputedLine = { input: InvoiceItemInput; amounts: LineAmounts };
+
+function computeLines(items: InvoiceItemInput[], discount: number, shipping: number) {
+  const totals = computeInvoiceTotals({ items, discount, shipping });
+  return {
+    lines: totals.lines.map((amounts, index) => ({ input: items[index]!, amounts })),
+    totals,
+  };
 }
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   /* -------------------------------- reads ----------------------------- */
 
@@ -177,20 +219,144 @@ export class InvoicesService {
     };
   }
 
-  /** Public document view used by `/invoices/[id]/view` (no auth). */
-  async publicView(id: string) {
+  /* --------------------------- public links --------------------------- */
+
+  /**
+   * Mints a shareable link for an invoice.
+   *
+   * The raw token is returned exactly once and only its SHA-256 hash is stored,
+   * so a database leak does not yield working links. Links expire and can be
+   * revoked (see `revokePublicLinks`).
+   */
+  async createPublicLink(ctx: Ctx, id: string, input: { expiresInDays?: number }) {
+    const db = getDb();
+    const invoice = await this.requireInvoice(ctx.tenantId, id);
+    if (invoice.status === "draft") {
+      throw AppError.unprocessable("INVOICE_NOT_PUBLISHED", "Un brouillon ne peut pas être publié.");
+    }
+
+    const days = clampDays(input.expiresInDays);
+    const token = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const tokenId = newId();
+
+    await db.insert(invoicePublicTokens).values({
+      id: tokenId,
+      invoiceId: invoice.id,
+      tokenHash: hashToken(token),
+      expiresAt,
+    });
+
+    await audit({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      action: "invoice.public_link_created",
+      entity: "invoice",
+      entityId: invoice.id,
+      after: { tokenId, expiresAt: expiresAt.toISOString(), days },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+
+    return {
+      id: tokenId,
+      token,
+      expiresAt: expiresAt.toISOString(),
+      // The frontend route that consumes the token.
+      url: `/invoices/public/${token}`,
+    };
+  }
+
+  /** Revokes every active public link for an invoice. Returns how many were revoked. */
+  async revokePublicLinks(ctx: Ctx, id: string) {
+    const db = getDb();
+    // `requireInvoice` scopes to the tenant, so another tenant's invoice is a 404.
+    const invoice = await this.requireInvoice(ctx.tenantId, id);
+    const revoked = await db
+      .update(invoicePublicTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(invoicePublicTokens.invoiceId, invoice.id), isNull(invoicePublicTokens.revokedAt)))
+      .returning({ id: invoicePublicTokens.id });
+
+    await audit({
+      tenantId: ctx.tenantId,
+      actorId: ctx.userId,
+      action: "invoice.public_link_revoked",
+      entity: "invoice",
+      entityId: invoice.id,
+      after: { revoked: revoked.length },
+      ip: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+
+    return { revoked: revoked.length };
+  }
+
+  /**
+   * RLS SEAM — resolves a public token to an invoice WITHOUT a tenant context.
+   *
+   * This is the single query in the codebase that must read tenant-scoped data
+   * while no `app.tenant_id` is known, because the token *is* the only
+   * credential. When Row-Level Security lands (Sprint 1b) this method must run
+   * under the narrowest possible role: a policy that grants SELECT on exactly
+   * `invoice_public_tokens`, `invoices`, `invoice_items`, `clients` and
+   * `tenants`, restricted to the row the presented token identifies, and that
+   * grants nothing else. Everything downstream of here works with a resolved
+   * `tenantId`.
+   *
+   * Returns null for unknown, expired and revoked tokens alike so callers
+   * cannot distinguish "never existed" from "revoked" (no oracle).
+   */
+  async resolvePublicToken(token: string): Promise<{ invoiceId: string; tenantId: string } | null> {
+    if (!token || token.length > 128) return null;
+    const db = getDb();
+    const now = new Date();
+
+    const [row] = await db
+      .select({ invoiceId: invoicePublicTokens.invoiceId })
+      .from(invoicePublicTokens)
+      .where(
+        and(
+          eq(invoicePublicTokens.tokenHash, hashToken(token)),
+          isNull(invoicePublicTokens.revokedAt),
+          gt(invoicePublicTokens.expiresAt, now),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+
+    // The invoice may have been soft-deleted after the link was minted.
+    const [invoice] = await db
+      .select({ id: invoices.id, tenantId: invoices.tenantId, status: invoices.status })
+      .from(invoices)
+      .where(and(eq(invoices.id, row.invoiceId), isNull(invoices.deletedAt)))
+      .limit(1);
+    if (!invoice || invoice.status === "draft") return null;
+
+    return { invoiceId: invoice.id, tenantId: invoice.tenantId };
+  }
+
+  /** Public document view resolved from a token (no authentication). */
+  async publicViewByToken(token: string) {
+    const resolved = await this.resolvePublicToken(token);
+    if (!resolved) throw AppError.notFound("Document introuvable ou lien expiré");
+
     const db = getDb();
     const [row] = await db
       .select({ invoice: invoices, clientName: clients.name, clientEmail: clients.email, clientPhone: clients.phone, clientCode: clients.code })
       .from(invoices)
       .leftJoin(clients, eq(clients.id, invoices.clientId))
-      .where(and(eq(invoices.id, id), isNull(invoices.deletedAt)))
+      // The tenantId predicate is derived from the token, never from the caller.
+      .where(and(eq(invoices.id, resolved.invoiceId), eq(invoices.tenantId, resolved.tenantId), isNull(invoices.deletedAt)))
       .limit(1);
-    if (!row) throw AppError.notFound("Facture introuvable");
-    if (row.invoice.status === "draft") throw AppError.forbidden("Document non publié", "INVOICE_NOT_PUBLISHED");
+    if (!row) throw AppError.notFound("Document introuvable ou lien expiré");
 
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, row.invoice.tenantId)).limit(1);
-    const items = await db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).orderBy(asc(invoiceItems.position));
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, resolved.tenantId)).limit(1);
+    const items = await db
+      .select()
+      .from(invoiceItems)
+      .where(eq(invoiceItems.invoiceId, resolved.invoiceId))
+      .orderBy(asc(invoiceItems.position));
 
     return {
       invoice: this.serialize(row as InvoiceRow, items, items.length),
@@ -285,11 +451,13 @@ export class InvoicesService {
     const dueDate = ymd(input.dueDate);
     if (dueDate < issueDate) throw AppError.badRequest("La date d'échéance doit être postérieure à la date d'émission");
 
-    const { lines, subtotalMinor, taxMinor } = computeLines(input.items);
-    const globalDiscountMinor = toMinor(input.discount);
-    const shippingMinor = toMinor(input.shipping);
-    const totalMinor = subtotalMinor - globalDiscountMinor + shippingMinor + taxMinor;
-    if (totalMinor < 0) throw AppError.badRequest("Le total de la facture ne peut pas être négatif");
+    // Single money implementation: VAT is charged on the net (post-discount) base.
+    const { lines, totals } = computeLines(input.items, input.discount ?? 0, input.shipping ?? 0);
+    const subtotalMinor = totals.subtotalMinor;
+    const globalDiscountMinor = totals.globalDiscountMinor;
+    const shippingMinor = toMinorStrict(input.shipping ?? 0, "shipping");
+    const taxMinor = totals.taxMinor;
+    const totalMinor = totals.totalMinor;
 
     const id = newId();
     const number = await documentNumber(ctx.tenantId, "invoice", settings?.invoicePrefix?.replace(/-$/, "") || "FA");
@@ -325,11 +493,11 @@ export class InvoicesService {
           productId: line.input.productId ?? null,
           description: line.input.description,
           quantity: String(line.input.quantity),
-          unitPriceMinor: toMinor(line.input.unitPrice),
-          discountBp: Math.round(line.input.discount * 100),
-          taxRateBp: Math.round(line.input.taxRate * 100),
-          taxMinor: line.taxMinor,
-          lineTotalMinor: line.lineTotalMinor,
+          unitPriceMinor: toMinorStrict(line.input.unitPrice, `items[${index}].unitPrice`),
+          discountBp: percentToBp(line.input.discount, "discount"),
+          taxRateBp: percentToBp(line.input.taxRate, "taxRate"),
+          taxMinor: line.amounts.taxMinor,
+          lineTotalMinor: line.amounts.totalMinor,
         })),
       );
       await tx.insert(invoiceStatusHistory).values({
@@ -340,6 +508,24 @@ export class InvoicesService {
         actorId: ctx.userId,
         reason: "Création",
       });
+
+      // The ledger entry is written in the SAME transaction as the invoice, so
+      // an invoice can never exist without its entry. Drafts are not posted:
+      // nothing has been billed yet, so there is nothing to account for.
+      if (status !== "draft") {
+        await this.ledger.postInvoice(tx, {
+          tenantId: ctx.tenantId,
+          invoiceId: id,
+          invoiceNumber: number,
+          entryDate: issueDate,
+          subtotalMinor,
+          discountMinor: globalDiscountMinor,
+          shippingMinor,
+          taxMinor,
+          totalMinor,
+          createdBy: ctx.userId,
+        });
+      }
     });
 
     await audit({ tenantId: ctx.tenantId, actorId: ctx.userId, action: "invoice.created", entity: "invoice", entityId: id, after: { number, total: fromMinor(totalMinor) }, ip: ctx.ip, userAgent: ctx.userAgent });
@@ -365,19 +551,25 @@ export class InvoicesService {
 
     if (input.items) {
       if (Number(existing.paidMinor) > 0) throw AppError.conflict("INVOICE_HAS_PAYMENTS", "Une facture partiellement payée ne peut pas être modifiée.");
-      const computed = computeLines(input.items);
-      const discountMinor = toMinor(input.discount ?? fromMinor(Number(existing.discountMinor)));
-      const shippingMinor = toMinor(input.shipping ?? fromMinor(Number(existing.shippingMinor)));
-      const totalMinor = computed.subtotalMinor - discountMinor + shippingMinor + computed.taxMinor;
-      if (totalMinor < 0) throw AppError.badRequest("Le total de la facture ne peut pas être négatif");
-      patch.subtotalMinor = computed.subtotalMinor;
-      patch.taxMinor = computed.taxMinor;
-      patch.discountMinor = discountMinor;
-      patch.shippingMinor = shippingMinor;
+      const discountInput = input.discount ?? fromMinor(Number(existing.discountMinor));
+      const shippingInput = input.shipping ?? fromMinor(Number(existing.shippingMinor));
+      const computed = computeLines(input.items, discountInput, shippingInput);
+      const { totals: newTotals } = computed;
+      const totalMinor = newTotals.totalMinor;
+      // Preserve the amount already collected: only the outstanding balance moves.
+      const paidMinor = Number(existing.paidMinor);
+      if (totalMinor < paidMinor) {
+        throw AppError.conflict("INVOICE_BELOW_PAID_AMOUNT", "Le nouveau total est inférieur aux paiements déjà encaissés.");
+      }
+      patch.subtotalMinor = newTotals.subtotalMinor;
+      patch.taxMinor = newTotals.taxMinor;
+      patch.discountMinor = newTotals.globalDiscountMinor;
+      patch.shippingMinor = toMinorStrict(shippingInput, "shipping");
       patch.totalMinor = totalMinor;
-      patch.dueMinor = totalMinor;
+      patch.paidMinor = paidMinor;
+      patch.dueMinor = totalMinor - paidMinor;
       lines = computed.lines;
-      totals = { subtotalMinor: computed.subtotalMinor, taxMinor: computed.taxMinor, totalMinor };
+      totals = { subtotalMinor: newTotals.subtotalMinor, taxMinor: newTotals.taxMinor, totalMinor };
     }
 
     const nextIssue = (patch.issueDate as string | undefined) ?? existing.issueDate;
@@ -396,11 +588,11 @@ export class InvoicesService {
             productId: line.input.productId ?? null,
             description: line.input.description,
             quantity: String(line.input.quantity),
-            unitPriceMinor: toMinor(line.input.unitPrice),
-            discountBp: Math.round(line.input.discount * 100),
-            taxRateBp: Math.round(line.input.taxRate * 100),
-            taxMinor: line.taxMinor,
-            lineTotalMinor: line.lineTotalMinor,
+            unitPriceMinor: toMinorStrict(line.input.unitPrice, `items[${index}].unitPrice`),
+            discountBp: percentToBp(line.input.discount, "discount"),
+            taxRateBp: percentToBp(line.input.taxRate, "taxRate"),
+            taxMinor: line.amounts.taxMinor,
+            lineTotalMinor: line.amounts.totalMinor,
           })),
         );
       }
@@ -534,10 +726,23 @@ export class InvoicesService {
 
   /* -------------------------------- PDF ------------------------------- */
 
-  async streamPdf(id: string, tenantId: string | null, res: Response): Promise<void> {
+  /** Public PDF download: the token, not the invoice id, authorises the read. */
+  async streamPdfByPublicToken(token: string, res: Response): Promise<void> {
+    const resolved = await this.resolvePublicToken(token);
+    if (!resolved) throw AppError.notFound("Document introuvable ou lien expiré");
+    await this.streamPdf(resolved.invoiceId, resolved.tenantId, res);
+  }
+
+  /**
+   * Streams the invoice PDF.
+   *
+   * `tenantId` is REQUIRED: there is no anonymous-by-id path any more. Public
+   * downloads resolve a token to a tenant first (see `streamPdfByPublicToken`)
+   * and then call this, so the tenant predicate is always present.
+   */
+  async streamPdf(id: string, tenantId: string, res: Response): Promise<void> {
     const db = getDb();
-    const filters: SQL[] = [eq(invoices.id, id), isNull(invoices.deletedAt)];
-    if (tenantId) filters.push(eq(invoices.tenantId, tenantId));
+    const filters: SQL[] = [eq(invoices.id, id), eq(invoices.tenantId, tenantId), isNull(invoices.deletedAt)];
     const [row] = await db
       .select({ invoice: invoices, clientName: clients.name })
       .from(invoices)
@@ -674,12 +879,13 @@ export class InvoicesService {
     if (query.minAmount) filters.push(gte(invoices.totalMinor, toMinor(Number(query.minAmount))));
     if (query.maxAmount) filters.push(lte(invoices.totalMinor, toMinor(Number(query.maxAmount))));
     if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(
-        sql`lower(${invoices.number}) like ${term}`,
-        sql`lower(coalesce(${clients.name}, '')) like ${term}`,
-        sql`lower(coalesce(${clients.email}, '')) like ${term}`,
-      );
+      const search = buildSearchFilter(query.search, invoices.searchText, {
+        // The invoice's own text is folded, so "ف-2026" and "ف 2026" agree.
+        // The client is reached through a JOIN and has its own search_text;
+        // the email is raw because a local part must not be folded.
+        normalizedExtras: [clients.searchText],
+        extras: [sql`lower(coalesce(${clients.email}, ''))`],
+      });
       if (search) filters.push(search);
     }
     return filters;

@@ -23,10 +23,35 @@ export const updateProductStatusSchema = z.object({
 
 export const stockMovementSchema = z.object({
   type: z.enum(["in", "out", "adjustment"]),
-  quantity: z.number().finite(),
+  // A non-positive quantity would silently invert the movement (e.g. an `out`
+  // of -5 would credit stock), so it is rejected at the boundary.
+  quantity: z.number().finite().nonnegative(),
+  /** `adjustment` sets the absolute level, so it must be >= 0; enforced below. */
+
   unitCost: z.number().finite().nonnegative().optional(),
   reason: z.string().max(300).optional(),
+}).refine((value) => value.type === "adjustment" || value.quantity > 0, {
+  message: "La quantité doit être strictement positive pour une entrée ou une sortie",
+  path: ["quantity"],
 });
+
+/**
+ * One component of a product. Quantities are positive: a negative quantity
+ * would invert the requirement, and `0` is a line that should simply not exist.
+ */
+export const bomLineSchema = z.object({
+  childId: z.string().min(1),
+  quantity: z.number().finite().positive(),
+  /** Scrap allowance in basis points; 500 = 5% extra is consumed. */
+  scrapBp: z.number().int().min(0).max(10_000).optional(),
+});
+
+export const replaceBomSchema = z.object({
+  lines: z.array(bomLineSchema).max(500),
+});
+
+export type BomLineInput = z.infer<typeof bomLineSchema>;
+export type ReplaceBomInput = z.infer<typeof replaceBomSchema>;
 
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(120),
@@ -52,6 +77,10 @@ export const updateTaxSchema = createTaxSchema.partial();
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type StockMovementInput = z.infer<typeof stockMovementSchema>;
+export const bomExplosionQuerySchema = z.object({
+  quantity: z.coerce.number().finite().positive().default(1),
+});
+export type BomExplosionQuery = z.infer<typeof bomExplosionQuerySchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type CreateTaxInput = z.infer<typeof createTaxSchema>;

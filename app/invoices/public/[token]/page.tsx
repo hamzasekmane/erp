@@ -1,12 +1,11 @@
 "use client";
 
-import { apiBaseUrl } from "@/app/lib/apiBase";
 import { useEffect, useState, use } from "react"; 
 import { invoiceService } from "@/app/services/invoice.service";
 import InvoiceDownloadBtn from "@/app/components/InvoiceDownloadBtn";
 import { 
-  User, CreditCard, CheckCircle, 
-  FileText, Clock, ShieldCheck, ArrowRight, Loader2
+  User, CreditCard, CheckCircle,
+  FileText, Clock, Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -36,20 +35,25 @@ interface InvoiceDetail {
   };
 }
 
-export default function PublicInvoiceViewPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params); 
+/**
+ * Public invoice page. The dynamic segment carries a SHARE TOKEN, not an
+ * invoice id: public access is authorised by a hashed, expiring, revocable
+ * token, so a leaked invoice id is worthless.
+ *
+ * The "pay online" button was removed: it posted to `/invoices/:id/pay/public`,
+ * an endpoint that has never existed, so it could only ever fail. Online payment
+ * is a separate feature (Chargily gateway) and should not be faked here.
+ */
+export default function PublicInvoiceViewPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token: shareToken } = use(params);
   
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-
-  // URL de l'API (à définir dans ton .env.local)
-  const API_URL = apiBaseUrl();
 
   useEffect(() => {
     const fetchInvoice = async () => {
       try {
-        const response = await invoiceService.getPublicInvoice(id);
+        const response = await invoiceService.getPublicInvoice(shareToken);
         if (response?.success && response.data) {
           setInvoice(response.data);
         }
@@ -61,45 +65,7 @@ export default function PublicInvoiceViewPage({ params }: { params: Promise<{ id
     };
 
     fetchInvoice();
-  }, [id]);
-
-const handlePayment = async () => {
-  if (!invoice || isPaid) return;
-
-  setIsProcessingPayment(true);
-
-  try {
-    // تأكد أن المسار في الـ Backend هو: /invoices/:id/pay/public
-    // وأنه لا يحتوي على middleware (protect)
-    const response = await fetch(`${API_URL}/invoices/${id}/pay/public`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: remainingBalance,
-        method: "credit_card",
-        notes: "Paiement via portail client",
-        reference: `PAY-${invoice.invoiceNumber}`
-      }),
-    });
-
-    const result = await response.json();
-
-    if (result.success) {
-      setInvoice((prev) =>
-        prev ? { ...prev, status: "paid", paidAmount: prev.total } : null
-      );
-      alert("Paiement réussi !");
-    } else {
-      // إذا كانت النتيجة "unauthorized"، ستعرف أن المشكلة في الـ Backend
-      alert(result.message || "Erreur de paiement");
-    }
-  } catch (error) {
-    console.error("Payment Error:", error);
-    alert("Erreur de connexion au serveur.");
-  } finally {
-    setIsProcessingPayment(false);
-  }
-};
+  }, [shareToken]);
 
   if (loading) {
     return (
@@ -132,8 +98,8 @@ const handlePayment = async () => {
            
            <InvoiceDownloadBtn 
             invoiceId={invoice._id} 
-            invoiceNumber={invoice.invoiceNumber} 
-            token=""
+            invoiceNumber={invoice.invoiceNumber}
+            token={shareToken}
             isPublic={true}
           />
         </div>
@@ -230,15 +196,15 @@ const handlePayment = async () => {
                 </div>
 
                 {!isPaid ? (
-                  <button 
-                    disabled={isProcessingPayment}
-                    onClick={handlePayment}
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-900 font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 group shadow-lg shadow-emerald-500/20 disabled:opacity-50"
-                  >
-                    {isProcessingPayment ? <Loader2 className="animate-spin" /> : <ShieldCheck size={20} className="group-hover:rotate-12 transition-transform" />}
-                    <span className="uppercase tracking-tighter text-sm">Payer Maintenant</span>
-                    {!isProcessingPayment && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
-                  </button>
+                  <div className="flex items-start gap-3 text-zinc-300 bg-white/5 p-5 rounded-2xl border border-white/10">
+                    <Clock size={18} className="mt-0.5 shrink-0 text-emerald-400" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase leading-none mb-1">Règlement en attente</p>
+                      <p className="text-[9px] opacity-70 italic font-bold leading-relaxed">
+                        Contactez votre fournisseur pour régler cette facture.
+                      </p>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3 text-emerald-400 bg-emerald-500/10 p-5 rounded-2xl border border-emerald-500/20 shadow-inner animate-in zoom-in-95 duration-300">
                     <CheckCircle size={22} />

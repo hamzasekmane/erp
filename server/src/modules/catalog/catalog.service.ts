@@ -1,13 +1,15 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { categories, products, stockLevels, stockMovements, taxes } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
+import { StockValuationService } from "./stock-valuation.service";
 import type {
   CreateCategoryInput,
   CreateProductInput,
@@ -65,6 +67,8 @@ function serializeProduct(row: Row) {
 
 @Injectable()
 export class CatalogService {
+  constructor(private readonly valuation: StockValuationService) {}
+
   /* ----------------------------- products ----------------------------- */
 
   async listProducts(ctx: Ctx, query: ProductListQuery): Promise<{ items: ReturnType<typeof serializeProduct>[]; pagination: Pagination }> {
@@ -75,11 +79,10 @@ export class CatalogService {
       filters.push(sql`${products.categoryId} in (select id from categories where tenant_id = ${ctx.tenantId} and lower(name) = ${query.category.toLowerCase()})`);
     }
     if (query.status === "active" || query.status === "inactive") filters.push(eq(products.isActive, query.status === "active"));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${products.name}) like ${term}`, sql`lower(${products.code}) like ${term}`);
-      if (search) filters.push(search);
-    }
+    // Indexed, normalization-aware: `search_text` is maintained by a trigger and
+    // carries the Arabic folds, so "احمد" finds a product stored as "أحمد".
+    const search = buildSearchFilter(query.search, products.searchText);
+    if (search) filters.push(search);
     if (query.lowStock === "true") {
       filters.push(sql`coalesce(${stockLevels.quantity}, 0) <= ${products.minStock}`);
     }
@@ -240,11 +243,12 @@ export class CatalogService {
   }
 
   async productStats(ctx: Ctx) {
+
     const db = getDb();
     const [row] = await db
       .select({
         totalProducts: sql<number>`count(*)::int`,
-        totalStockValue: sql<number>`coalesce(sum(coalesce(${stockLevels.quantity}, 0) * ${products.priceMinor}), 0)::bigint`,
+        totalStockValue: sql<number>`coalesce(sum(coalesce(${stockLevels.quantity}, 0) * ${products.costMinor}), 0)::bigint`,
         lowStockCount: sql<number>`coalesce(sum(case when coalesce(${stockLevels.quantity}, 0) <= ${products.minStock} then 1 else 0 end), 0)::int`,
         outOfStockCount: sql<number>`coalesce(sum(case when coalesce(${stockLevels.quantity}, 0) <= 0 then 1 else 0 end), 0)::int`,
       })
@@ -252,10 +256,23 @@ export class CatalogService {
       .leftJoin(stockLevels, eq(stockLevels.productId, products.id))
       .where(and(eq(products.tenantId, ctx.tenantId), isNull(products.deletedAt)));
 
+    // `totalStockValue` used to be the ONLY figure: quantity * product.cost.
+    // That number moves whenever someone edits a product's cost, so it changes
+    // the value of inventory that was bought last month. It is kept here under
+    // its old name for one release, and the movement-derived valuation is
+    // reported next to it so the drift is visible rather than hidden.
+    const valued = await this.valuation.summary({ tenantId: ctx.tenantId });
+
     return {
       summary: {
         totalProducts: Number(row?.totalProducts ?? 0),
+        /** @deprecated static cost basis; use `stockValuation`. */
         totalStockValue: fromMinor(Number(row?.totalStockValue ?? 0)),
+        stockValuation: valued.valuedAmount,
+        stockValuationMinor: valued.valuedAmountMinor,
+        valuationMethod: valued.method,
+        /** staticCost - valued. Non-zero means product costs have drifted. */
+        valuationDifference: fromMinor(valued.differenceMinor),
         lowStockCount: Number(row?.lowStockCount ?? 0),
         outOfStockCount: Number(row?.outOfStockCount ?? 0),
       },
@@ -393,22 +410,76 @@ export class CatalogService {
 
   private async applyStock(ctx: Ctx, productId: string, input: StockMovementInput) {
     const db = getDb();
+    const delta =
+      input.type === "in" ? input.quantity : input.type === "out" ? -input.quantity : 0;
+
     await db.transaction(async (tx) => {
-      const [level] = await tx.select().from(stockLevels).where(eq(stockLevels.productId, productId)).limit(1);
-      const current = Number(level?.quantity ?? 0);
-      const next = input.type === "adjustment" ? input.quantity : input.type === "in" ? current + input.quantity : current - input.quantity;
-      if (next < 0) throw AppError.unprocessable("INSUFFICIENT_STOCK", "Stock insuffisant pour cette opération.", { current });
-      if (level) {
-        await tx.update(stockLevels).set({ quantity: String(next), updatedAt: new Date() }).where(eq(stockLevels.productId, productId));
+      if (input.type === "adjustment") {
+        // `adjustment` sets an absolute level. The CHECK below rejects a
+        // negative target instead of allowing stock to go below zero.
+        const updated = await tx
+          .update(stockLevels)
+          .set({ quantity: String(input.quantity), updatedAt: new Date() })
+          .where(and(eq(stockLevels.productId, productId), eq(stockLevels.tenantId, ctx.tenantId)))
+          .returning({ productId: stockLevels.productId });
+        if (updated.length === 0) {
+          await tx.insert(stockLevels).values({
+            productId,
+            tenantId: ctx.tenantId,
+            quantity: String(input.quantity),
+          });
+        }
+      } else if (delta < 0) {
+        // Atomic decrement with a non-negative guard. The guard is evaluated by
+        // the database against the *current* value, so it cannot be bypassed by
+        // a concurrent transaction the way a read-compute-write sequence can.
+        const updated = await tx
+          .update(stockLevels)
+          .set({ quantity: sql`${stockLevels.quantity} + ${String(delta)}`, updatedAt: new Date() })
+          .where(
+            and(
+              eq(stockLevels.productId, productId),
+              eq(stockLevels.tenantId, ctx.tenantId),
+              sql`${stockLevels.quantity} + ${String(delta)} >= 0`,
+            ),
+          )
+          .returning({ quantity: stockLevels.quantity });
+
+        if (updated.length === 0) {
+          const [level] = await tx
+            .select({ quantity: stockLevels.quantity })
+            .from(stockLevels)
+            .where(and(eq(stockLevels.productId, productId), eq(stockLevels.tenantId, ctx.tenantId)))
+            .limit(1);
+          throw AppError.unprocessable("INSUFFICIENT_STOCK", "Stock insuffisant pour cette opération.", {
+            current: Number(level?.quantity ?? 0),
+          });
+        }
       } else {
-        await tx.insert(stockLevels).values({ productId, tenantId: ctx.tenantId, quantity: String(next) });
+        // Atomic increment; create the level row on first movement.
+        const updated = await tx
+          .update(stockLevels)
+          .set({ quantity: sql`${stockLevels.quantity} + ${String(delta)}`, updatedAt: new Date() })
+          .where(and(eq(stockLevels.productId, productId), eq(stockLevels.tenantId, ctx.tenantId)))
+          .returning({ quantity: stockLevels.quantity });
+
+        if (updated.length === 0) {
+          await tx.insert(stockLevels).values({
+            productId,
+            tenantId: ctx.tenantId,
+            quantity: String(delta),
+          });
+        }
       }
+
       await tx.insert(stockMovements).values({
         id: newId(),
         tenantId: ctx.tenantId,
         productId,
         type: input.type,
-        quantity: String(input.quantity),
+        // The movement records the signed effect so history reconciles with
+        // the level changes it caused.
+        quantity: String(input.type === "out" ? -Math.abs(input.quantity) : input.quantity),
         unitCostMinor: toMinor(input.unitCost ?? 0),
         reason: input.reason ?? null,
         createdBy: ctx.userId,

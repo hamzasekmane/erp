@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { invoices, outboxEvents, plans, subscriptions, tenantSettings, tenants, users } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate } from "../../shared/http";
 import { fromMinor } from "../../shared/money";
@@ -34,11 +35,8 @@ export class AdminService {
     const db = getDb();
     const filters: SQL[] = [isNull(tenants.deletedAt)];
     if (query.status) filters.push(eq(tenants.status, query.status));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${tenants.name}) like ${term}`, sql`lower(${tenants.email}) like ${term}`, sql`lower(${tenants.subdomain}) like ${term}`);
-      if (search) filters.push(search);
-    }
+    const search = buildSearchFilter(query.search, tenants.searchText);
+    if (search) filters.push(search);
     const where = and(...filters);
     const [rows, [countRow]] = await Promise.all([
       db.select().from(tenants).where(where).orderBy(desc(tenants.createdAt)).limit(query.limit).offset(query.offset),
