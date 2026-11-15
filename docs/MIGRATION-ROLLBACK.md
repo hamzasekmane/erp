@@ -74,6 +74,9 @@ statement, not a command. The procedure is:
 | `0005_normal_havok.sql` | `uploads` scan columns + check | `ALTER TABLE "uploads" DROP CONSTRAINT IF EXISTS "uploads_scan_status_chk";` then drop `scan_status, scan_engine, scan_signature, scanned_at`. |
 | `0006_stock_guards.sql` | `CHECK (quantity >= 0)` on `stock_levels` | `ALTER TABLE "stock_levels" DROP CONSTRAINT IF EXISTS "stock_levels_quantity_chk";` |
 | `0007_rls.sql` | RLS on 43 tables, `erp_app` role, grants, `resolve_public_token()` | See below. |
+| `0008_ledger.sql` | 5 ledger tables, indexes, FKs | `DROP TABLE "account_closure", "journal_lines", "journal_entries", "accounting_periods", "accounts";` |
+| `0009_ledger_guards.sql` | immutability + balance triggers, journal numbering | See below. |
+| `0010_rls_ledger.sql` | RLS + grants for the 5 ledger tables | `ALTER TABLE ... DISABLE ROW LEVEL SECURITY` per table (generated) |
 
 ### Notes specific to `0006_stock_guards`
 
@@ -123,6 +126,52 @@ DROP ROLE IF EXISTS erp_app;
 after this migration means a code path reads tenant data outside `runTenant`.
 Wrap that path. Disabling isolation to make it pass reintroduces the exact defect
 the migration exists to remove.
+
+### Notes specific to the ledger (`0008`–`0010`)
+
+The ledger is **append-only by design**, so "reverting" it is not a data-repair
+operation — it is a decision to discard accounting records.
+
+```sql
+-- In order: triggers, then the tables (journal_lines before journal_entries).
+DROP TRIGGER IF EXISTS journal_entries_no_update ON "journal_entries";
+DROP TRIGGER IF EXISTS journal_entries_no_delete ON "journal_entries";
+DROP TRIGGER IF EXISTS journal_lines_no_update  ON "journal_lines";
+DROP TRIGGER IF EXISTS journal_lines_no_delete  ON "journal_lines";
+DROP TRIGGER IF EXISTS journal_entries_balanced ON "journal_entries";
+DROP TRIGGER IF EXISTS journal_lines_entry_balanced ON "journal_lines";
+DROP TRIGGER IF EXISTS journal_entries_assign_number ON "journal_entries";
+DROP FUNCTION IF EXISTS ledger_reject_mutation();
+DROP FUNCTION IF EXISTS ledger_assert_entry_balanced();
+DROP FUNCTION IF EXISTS ledger_assert_entry_balanced_via_line();
+DROP FUNCTION IF EXISTS ledger_assign_number();
+
+-- RLS first, or the DROP is blocked by the policies.
+ALTER TABLE "journal_lines"   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "journal_entries" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "accounts"        DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "account_closure" DISABLE ROW LEVEL SECURITY;
+ALTER TABLE "accounting_periods" DISABLE ROW LEVEL SECURITY;
+
+DROP TABLE IF EXISTS "journal_lines";
+DROP TABLE IF EXISTS "journal_entries";
+DROP TABLE IF EXISTS "account_closure";
+DROP TABLE IF EXISTS "accounting_periods";
+DROP TABLE IF EXISTS "accounts";
+```
+
+**Before doing this, export the journals.** `COPY "journal_entries" TO ...` and
+`COPY "journal_lines" TO ...` are the only copy that will exist; the tables are
+designed so that nothing in the application can delete them.
+
+**Deploy the previous image in the same step.** Invoices and payments created
+after `0008` call `LedgerService` inside their transaction; a missing table
+turns every invoice creation into a 500.
+
+**Expected behaviour after a rollback:** posting stops, invoices and payments
+still work (their columns are untouched), and the balances on business rows are
+unaffected. That is deliberate — the ledger is derived data, so removing it does
+not corrupt the operational tables.
 
 ## 6. Data-repair runbook (money)
 
