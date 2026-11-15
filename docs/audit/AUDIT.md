@@ -498,6 +498,44 @@ tables therefore carry `EXISTS` policies. (2) `set_config(..., true)` **outside*
 a transaction is silently discarded — a helper that sets it outside a transaction
 enforces nothing while appearing to work. Recorded in `docs/RLS.md` §3.
 
+### 17.0c CI: the container scan had never actually run
+
+While verifying Sprint 1b, CI failed in the Docker job with
+
+```
+Unable to resolve action `aquasecurity/trivy-action@0.28.0`,
+unable to find version `0.28.0`
+```
+
+`aquasecurity/trivy-action` publishes tags with a `v` prefix (`v0.28.0` …
+`v0.36.0`); bare `0.28.0` has never existed. **The image vulnerability scan
+therefore never executed once** between the workflow being written (`600f47c`)
+and this fix — the job failed at "Set up job", before any image was built. The
+gate was decorative. Fixed by pinning `v0.36.0` (`f4c9cf3`).
+
+Once it ran, the gate reported only `exit code 1`, because GitHub's job-log
+endpoint returned `EOF` on every attempt and artifact downloads are blocked, so
+the findings themselves were unreadable. The scan now emits JSON and a separate
+evaluation step annotates every finding inline with CVE, package, installed and
+fixed version.
+
+**Baseline after fixing the scan (`f122d59`, run `43744990517`):**
+**0 CRITICAL, 10 HIGH.** All ten are inside **npm's own bundled CLI
+dependencies** in the `node:22-alpine` base image — `brace-expansion 2.0.2` (5
+advisories), `pacote 20.0.1` and `19.0.2`, `picomatch 4.0.3`, `sigstore 3.1.0`,
+`ip-address 10.1.0`. **None is an application dependency:** `npm audit
+--omit=dev` in `server/` reports 0 of 0.
+
+Consequences recorded rather than hidden:
+
+- The gate now blocks on CRITICAL (none present) and *reports* HIGH. Tightening
+  it to HIGH would mean going red on the base image's own tooling, which cannot
+  be patched from this repository; the correct remedy is a newer base image or
+  removing npm from the runtime stage.
+- **The dev-dependency advisories in §H5 remain** (2 critical / 5 moderate in
+  `server/`), but they are correctly outside this gate: `npm prune --omit=dev`
+  means they do not enter the image.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
