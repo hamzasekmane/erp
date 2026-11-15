@@ -7,7 +7,7 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { env, isProd } from "./config/env";
 import { ensureBaselinePlans } from "./db/bootstrap";
-import { closeDb, initDb } from "./db/client";
+import { assertRlsEffective, closeDb, initDb } from "./db/client";
 import { migrate } from "./db/migrate";
 import { ApiExceptionFilter } from "./shared/exception.filter";
 import { TenantScopeInterceptor } from "./shared/security/tenant-scope.interceptor";
@@ -54,6 +54,19 @@ async function bootstrap() {
   app.useGlobalFilters(new ApiExceptionFilter());
   // Wraps each authenticated request in its tenant's RLS scope.
   app.useGlobalInterceptors(new TenantScopeInterceptor());
+
+  const rls = await assertRlsEffective().catch((error: unknown) => ({
+    enforced: false,
+    reason: `RLS check failed: ${error instanceof Error ? error.message : String(error)}`,
+  }));
+  if (!rls.enforced) {
+    Logger.warn(
+      `[security] Row-Level Security is NOT effective: ${rls.reason}. Tenant isolation relies on application predicates only.`,
+      "Bootstrap",
+    );
+  } else {
+    Logger.log(`[security] ${rls.reason}`, "Bootstrap");
+  }
 
   await app.listen(env.PORT, "0.0.0.0");
   Logger.log(

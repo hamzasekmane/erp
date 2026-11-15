@@ -447,3 +447,14 @@ describe("RLS — cross-tenant leaks are impossible", () => {
     expect(await resolvePublicTokenScope("hash-does-not-exist")).toBeNull();
   });
 });
+
+describe("RLS — boot-time effectiveness check", () => {
+  it("reports that a superuser connection makes RLS inert", async () => {
+    const { assertRlsEffective } = await import("../db/client");
+    // The test process is a superuser, which bypasses policies: exactly the
+    // misconfiguration the boot check exists to surface.
+    const result = await assertRlsEffective();
+    expect(result.enforced).toBe(false);
+    expect(result.reason).toMatch(/superuser|BYPASSRLS/i);
+  });
+});

@@ -174,6 +174,40 @@ function quoteIdent(name: string): string {
  * Inside `runTenant()` this is the RLS-scoped transaction; everywhere else it is
  * the pooled handle. Services call this and stay unaware of scoping.
  */
+/**
+ * Verifies that the connected role is actually subject to RLS.
+ *
+ * A deployment that points DATABASE_URL at the table owner (or a superuser)
+ * runs with every policy silently inert. That is the single most likely way to
+ * believe isolation is on when it is not, so it is checked at boot rather than
+ * discovered later.
+ *
+ * Non-fatal by design: it logs loudly instead of refusing to start, because a
+ * superuser connection is legitimate in development and for platform admin.
+ */
+export async function assertRlsEffective(): Promise<{ enforced: boolean; reason: string }> {
+  if (!holder) throw new Error("Database not initialised. Call initDb() first.");
+  if (!env.RLS_ENABLED) {
+    return { enforced: false, reason: "RLS_ENABLED=false" };
+  }
+  const rows = extractRows(
+    await holder.db.execute(sql`
+      select current_user as role,
+             (select rolsuper from pg_roles where rolname = current_user) as is_superuser,
+             (select rolbypassrls from pg_roles where rolname = current_user) as bypass_rls
+    `),
+  );
+  const row = rows[0];
+  const role = String(row?.role ?? "unknown");
+  if (row?.is_superuser === true) {
+    return { enforced: false, reason: `connected as superuser "${role}"; RLS is inert` };
+  }
+  if (row?.bypass_rls === true) {
+    return { enforced: false, reason: `role "${role}" has BYPASSRLS; RLS is inert` };
+  }
+  return { enforced: true, reason: `role "${role}" is subject to RLS` };
+}
+
 export function getDb(): Database {
   const scope = tenantScope.getStore();
   if (scope) return scope.tx;
