@@ -571,6 +571,55 @@ fail-closed, it is a 500 on every request. The generator now emits per-wave
 migrations (policies *and* grants) and refuses to run when a schema table is
 unclassified.
 
+### 17.0e Phase 3, first algorithm modules — inventory valuation (DONE)
+
+Finding F-4 recorded that no supply-chain algorithms existed. The first one was
+not chosen for completeness but because inventory was being **valued wrongly**:
+
+```sql
+sum(coalesce(sl.quantity, 0) * p.cost_minor)   -- catalog.service.ts:247
+```
+
+`products.cost_minor` is a single mutable column, so editing a product's cost
+retroactively revalued stock bought months earlier, and there was no cost of
+goods sold at all. `stock_movements.unit_cost_minor` had been recording the
+right data all along; nothing read it for value.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Framework-agnostic library (`server/lib/algorithms`) | ✅ | `valuation.ts`, no Nest/Drizzle/I-O |
+| FIFO, LIFO, weighted average, FEFO | ✅ | `orderLayers`, `issueFromLayers`, `issueWeightedAverage` |
+| Big-O documented per function | ✅ | doc comments; O(n log n) issue, O(n) value |
+| Property-based tests | ✅ | 400 random layer sets: value conservation, issue fidelity, FIFO≡LIFO at uniform cost |
+| Valuation from real movement history | ✅ | `stock-valuation.service.ts`, both endpoints live |
+| Static figure kept visible, not swapped | ✅ | `stockValuation` + `staticCostAmount` + `differenceMinor` |
+| Benchmark | ✅ | `npm run bench:valuation`, 2 000 products / 200 000 movements |
+| ADR | ✅ | `docs/adr/0005-inventory-valuation.md` |
+
+**Test count:** 217 → 263 (13 files).
+
+**The rounding rule is the part that needed the most care, and a property test
+caught it.** The first WAC implementation recomputed remaining value from the
+layers' own costs and then "corrected" a partial issue down to the batch cost,
+so value vanished (expected 222 113, got 131 129). Two rules now hold and are
+asserted: issues allocate value pro rata rather than multiplying a rounded
+average, and WAC remaining value is carried forward in `remainingValueMinor`
+because a rounded per-unit average cannot be multiplied back.
+
+**Two CI failures I caused, both worth recording because they are the same
+mistake in two places:**
+
+1. I edited `src/openapi/document.ts` but never staged it, so the committed
+   `openapi.json` advertised 106 paths while the generator produced 104 from a
+   clean checkout. I had "verified" it locally by regenerating in the session
+   where the edit existed. Only the clean-clone CI run exposed it.
+2. The Dockerfile copied `src` but not the new top-level `lib/`, so the image
+   build had nothing to compile against. Adding a top-level directory and
+   forgetting the container is a recurring shape; `COPY lib ./lib` fixes it.
+
+Both were reproduced in a fresh clone before being fixed, and the clean clone
+now passes tsc, 263 tests, build, audit and the OpenAPI drift gate.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
