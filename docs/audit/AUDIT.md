@@ -452,15 +452,37 @@ RLS, idempotency, sessions, security headers and the ledger are explicitly
 
 **Test count progression:** 61 → 85 → 92 → 97, all passing.
 
+### 17.0 Sprint 1a — public invoice tokens (DONE)
+
+| Item | Status | Commit | Evidence |
+| --- | --- | --- | --- |
+| DB-6: public invoice access authorised by token, not id | ✅ Done | `feat(invoices)!: authorise public access by revocable token, not by id` | 17 new e2e cases; 14 failed before the change |
+| F-2: dead `/invoices/:id/pay/public` call removed | ✅ Done | `feat(web): share invoices by token and stop calling the missing pay endpoint` | page no longer offers a button that cannot work |
+
+**What changed.** `GET /invoices/:id/view` and `/invoices/:id/export/pdf/public`
+are gone. Public access now uses `POST /invoices/:id/public-link` (mint),
+`DELETE /invoices/:id/public-link` (revoke all), `GET /invoices/public/:token`
+and `GET /invoices/public/:token/pdf`. Only the SHA-256 hash of the token is
+stored, links expire (30 days default, 1–90 clamp) and are revocable, and
+unknown/expired/revoked tokens all return 404 so the route is not an oracle.
+`streamPdf()` now *requires* a `tenantId`; the nullable anonymous path was
+deleted, so no future caller can read an invoice without a tenant predicate.
+
+**RLS seam identified.** `resolvePublicToken()` in
+`invoices.service.ts` is the single query in the codebase that reads
+tenant-scoped data with no tenant known, because the token is the only
+credential. It is annotated as the exact place where Sprint 1b must grant a
+narrow policy (the row the token identifies, nothing else). This is why this
+sprint preceded RLS: a tokenless public route cannot be expressed as a tenant
+predicate, so RLS could not have been designed around it.
+
+**Test count:** 97 → 114.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
 
-1. **Sprint 1a — public invoice token fix.** Replace the unauthenticated
-   `GET /invoices/:id/view` (ID-only, non-revocable) with the existing
-   `invoice_public_tokens` table: hashed token, expiry, revocation.
-   *Must precede RLS*, because a tokenless public route cannot be expressed as
-   a tenant predicate.
+1. **Sprint 1a — public invoice token fix.** ✅ **Done (see §17.0).**
 2. **Sprint 1b — Row-Level Security.** Enable + `FORCE ROW LEVEL SECURITY` on
    tenant-scoped tables; the app connects as a non-owner role; `SET LOCAL
    app.tenant_id` inside every transaction and **never** at session level on a
