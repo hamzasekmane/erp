@@ -795,6 +795,79 @@ whose client is `المصطفى`), and it is why `buildSearchFilter` has a disti
 *second* column (last name) returns 400 rows. Non-zero is the evidence that the
 trigger concatenates the whole declared row rather than only its first field.
 
+### 17.0i Verification against a real PostgreSQL server (DONE)
+
+Every test in this project up to this point ran on PGlite: PostgreSQL compiled to
+WASM. It is the same SQL engine, and for dialect questions that is enough — but
+its connection is a **superuser**, and a superuser bypasses Row-Level Security
+even on tables declared `FORCE ROW LEVEL SECURITY`. Adding a job that runs the
+same suite against `postgres:16-alpine` was therefore not a formality. It found
+four defects, three of which were in shipped product code.
+
+**1. `pg_trgm` was missing, so the search tests tested nothing.** On PGlite the
+extension is provided at construction. On a plain server build without contrib,
+`create extension pg_trgm` fails and the 45 search tests **skip** — a green
+result that proves nothing. This is exactly the kind of false positive the suite
+exists to prevent, and it was hiding in the suite itself. CI now creates the
+extension and asserts `similarity('دراجة هوائية','دراجه هوائيه') = 0.529` up front.
+
+**2. Self-service registration returned 500.** `register` creates a tenant that
+does not exist yet, so no `app.tenant_id` was set and the INSERT was rejected:
+
+    ERROR: new row violates row-level security policy for table "tenants"
+
+Invisible in development and CI because the superuser bypasses the policy. The
+fix sets the new tenant's own id as the transaction scope. Two things learned in
+the process are recorded because they will be needed again: a **SECURITY DEFINER
+function does not escape this** (FORCE RLS applies to the table owner, so only a
+superuser or `BYPASSRLS` is exempt), and `set_config(..., true)` outside a
+transaction is a no-op, which is precisely how a test can appear to prove this
+without proving anything.
+
+**3. Platform-level audit events were silently dropped.** Events with no tenant
+(a failed login, a password-reset request, an invalid public token) were rejected
+by the same mechanism, so the audit trail was missing the security events it
+exists for. Migration `0018` allows INSERT of a row with `tenant_id IS NULL` and
+deliberately leaves SELECT/UPDATE/DELETE untouched: such a row is readable by
+nobody through the application role, only by a privileged operator.
+
+**4. Subdomain allocation was blind, and the suite owned its database.**
+`uniqueSubdomain` checked availability with a SELECT on `tenants`; under RLS that
+returns zero rows, so it always answered "free" and the second registration died
+on `tenants_subdomain_uq`. It now allocates by inserting inside a savepoint and
+retrying on the constraint — no privileged read at all. The duplicate-email
+pre-check had the same flaw, so the user insert also translates the unique
+violation into `EMAIL_IN_USE`.
+
+**A false positive was removed rather than worked around.** `rls.e2e.test.ts`
+asserted `expect(outside).toBe(2)` — that the *whole* tenants table held exactly
+its two rows. It passed only because the suite implicitly owned the database. It
+now counts its own fixture ids; the property under test is unchanged.
+
+**The suite is now re-runnable against a persistent database.** Three sources of
+leftover state: tenant rows that no cascade reaches (nine tables carry
+`tenant_id` with no FK to `tenants` — `number_sequences` was the first to bite),
+the ledger's append-only guards refusing the cascade, and tenants created through
+`POST /api/auth/register`. `src/test/db-cleanup.ts` handles all three. Note that
+`session_replication_role = replica` is the obvious one-liner for the ledger and
+is **wrong**: it also suspends FOREIGN KEY triggers, so the cascade never fires
+and the children are orphaned instead.
+
+**Outstanding, stated rather than papered over:**
+
+* **Login cannot work under real RLS.** Login resolves a user by email before any
+  tenant is known, which the policies correctly forbid. This is an architecture
+  decision — a SECURITY DEFINER lookup returning only identifiers, or a separate
+  identity table — and it is *not* fixed here. It is the single largest gap
+  between "the policies are engaged" and "the application works under them".
+* **The suite runs as a superuser in CI.** Running it entirely as a
+  non-superuser role was attempted; most suites cannot, because they seed child
+  tables (`tenant_settings`, `clients`, …) directly rather than through the
+  application, and those inserts are correctly refused. Making them RLS-aware is
+  a fixture rewrite, not a CI change. `rls.e2e.test.ts` covers the behaviour by
+  switching to `erp_app` explicitly, and the two new tests were verified to FAIL
+  when a policy is dropped — a test that passes either way is worse than none.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
@@ -836,8 +909,14 @@ Fixed with the product owner on 2026-11-15:
    signature of a code path reading outside `runTenant`. If per-module gating is
    still required, splitting `0007_rls.sql` is mechanical — the generator can
    emit one file per module.
-7. **Tests still run as a superuser.** They become a tenant via
-   `SET LOCAL ROLE erp_app` and prove the scope is engaged, but the instruction
-   was that tests must not run as superuser. Closing this needs a CI PostgreSQL
-   service with a dedicated non-superuser login — it cannot be done with the
-   embedded PGlite database, which has no separate connection identity.
+7. **Tests still run as a superuser — partially closed.** A CI job against a
+   real `postgres:16-alpine` now exists (§17.0i), and running the suite as a
+   NOSUPERUSER role there is what exposed the registration and auditing bugs.
+   Running the *whole* suite that way is still not possible: most fixtures seed
+   child tables directly instead of going through the application, and those
+   inserts are correctly refused by the policies. Closing it needs the fixtures
+   rewritten to enter a tenant scope, and **login needs an architecture decision
+   first** — it resolves a user by email before a tenant is known, which RLS
+   forbids. Until then `rls.e2e.test.ts` covers the policies by switching to
+   `erp_app` explicitly, with negative checks proving the assertions fail when a
+   policy is dropped.
