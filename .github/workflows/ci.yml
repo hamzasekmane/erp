@@ -165,22 +165,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Reports are written to files and uploaded even when the gate fails, so
+      # the exact findings can be inspected after the run instead of being lost
+      # in the log. The gate itself is the step's exit code.
       - name: Scan API image for HIGH/CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: erp-api:ci
           format: table
+          output: trivy-api.txt
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
 
+      - name: Upload API vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-api
+          path: trivy-api.txt
+          if-no-files-found: warn
+
       - name: Scan web image for HIGH/CRITICAL vulnerabilities
+        if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: erp-web:ci
           format: table
+          output: trivy-web.txt
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
+
+      - name: Upload web vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-web
+          path: trivy-web.txt
+          if-no-files-found: warn
