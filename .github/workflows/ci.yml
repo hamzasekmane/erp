@@ -53,6 +53,90 @@ jobs:
           git diff --exit-code -- ../docs/openapi.json
 
   # ---------------------------------------------------------------------------
+  # API against a REAL PostgreSQL server.
+  #
+  # The `api` job runs on PGlite (PostgreSQL compiled to WASM). It is a faithful
+  # SQL engine but its connection is a superuser, so several things that matter
+  # in production are simply not exercised there. Running the same suite against
+  # a real server found three defects that PGlite could not fail on:
+  #
+  #   * `pg_trgm` is absent unless contrib is installed, so the search suites
+  #     skipped silently instead of testing anything;
+  #   * registration wrote a tenant with no RLS context, which a superuser
+  #     tolerates and a real deployment does not;
+  #   * the suite was not re-runnable against one database.
+  #
+  # `postgres:16-alpine` ships contrib, so `pg_trgm` and `normalize()` need no
+  # build step. The suite runs twice on purpose: a developer will, and a leftover
+  # row from run 1 should not be the reason run 2 fails.
+  #
+  # SCOPE NOTE — this job connects as the superuser. Running the whole suite as a
+  # NON-superuser role is the configuration that found the RLS defects above, but
+  # it cannot be the default here: most suites seed child tables directly
+  # (`tenant_settings`, `clients`, ...) rather than going through the application,
+  # and those inserts are correctly refused under real RLS. Making them all
+  # RLS-aware is a fixture rewrite, not a CI change, and it is recorded as
+  # outstanding work in docs/audit/AUDIT.md §17 rather than faked here by
+  # weakening the policies. The RLS *behaviour* itself is covered by
+  # rls.e2e.test.ts, which switches to the application role explicitly with
+  # `set local role erp_app` and was verified to fail when a policy is dropped.
+  # ---------------------------------------------------------------------------
+  api-postgres:
+    name: API — PostgreSQL réel
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/erp_ci
+      MIGRATION_DATABASE_URL: postgres://postgres:postgres@localhost:5432/erp_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Create a fresh database
+        # A fresh database per run, so a failure is never leftover state.
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE erp_ci"
+
+      - name: Confirm pg_trgm is available
+        # The search suites SKIP when `create extension pg_trgm` fails, which
+        # looks like a pass. Assert it up front so a missing contrib is loud.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d erp_ci -v ON_ERROR_STOP=1             -c "CREATE EXTENSION IF NOT EXISTS pg_trgm" \
+            -c "SELECT similarity('دراجة هوائية', 'دراجه هوائيه') AS arabic_similarity"
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Tests (PostgreSQL 16)
+        run: npm test
+
+      - name: Tests are re-runnable against the same database
+        run: npm test
+
+  # ---------------------------------------------------------------------------
   # Web: typecheck -> build -> dependency audit
   # ---------------------------------------------------------------------------
   web:

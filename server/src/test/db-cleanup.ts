@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "../db/client";
+import { tenants } from "../db/schema";
 
 /**
  * Deletes test tenants so a suite can seed fixed ids again.
@@ -117,4 +118,32 @@ export async function resetRegistrations(emails: readonly string[]): Promise<voi
   // A registration whose tenant was removed may still have left the user row
   // behind if it had no tenant, so clear those too.
   await getDb().execute(sql`delete from users where lower(email) in (${list})`);
+}
+
+/**
+ * Seeds tenant rows, doing for fixtures exactly what registration does in
+ * production: give the INSERT a valid RLS context.
+ *
+ * Without it, `insert into tenants` is rejected whenever the connection role is
+ * subject to RLS (a NON-superuser role, i.e. the real configuration):
+ *
+ *   ERROR: new row violates row-level security policy for table "tenants"
+ *
+ * The superuser connection used by the PGlite run bypasses policies, which is why
+ * the suite passed for so long while seeding this way. Each row is inserted with
+ * its own id as the scope, in its own transaction, so the setting cannot leak to
+ * the next insert.
+ */
+export async function seedTenants(
+  input: typeof tenants.$inferInsert | readonly (typeof tenants.$inferInsert)[],
+): Promise<void> {
+  const rows = Array.isArray(input) ? input : [input];
+  for (const row of rows) {
+    await getDb().transaction(async (tx) => {
+      if ("id" in row && row.id) {
+        await tx.execute(sql`select set_config('app.tenant_id', ${row.id}, true)`);
+      }
+      await tx.insert(tenants).values(row);
+    });
+  }
 }

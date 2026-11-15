@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resetTenants } from "./db-cleanup";
+import { resetTenants, seedTenants } from "./db-cleanup";
 import { closeDb, getDb, initDb, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -35,7 +35,7 @@ beforeAll(async () => {
   await migrate();
   await runGlobal(async () => {
     await resetTenants([TENANT]);
-    await getDb().insert(schema.tenants).values({ id: TENANT, name: "Search API", subdomain: "sapi", email: "s@sapi.dz" });
+    await seedTenants({ id: TENANT, name: "Search API", subdomain: "sapi", email: "s@sapi.dz" });
   });
   await runTenant(TENANT, async () => {
     await getDb().insert(schema.products).values([

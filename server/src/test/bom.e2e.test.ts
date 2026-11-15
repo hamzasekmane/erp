@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { resetTenants } from "./db-cleanup";
+import { resetTenants, seedTenants } from "./db-cleanup";
 import { closeDb, getDb, initDb, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -49,7 +49,7 @@ beforeAll(async () => {
     // second run would otherwise fail on tenants_pkey. Deleting the tenants
     // cascades to every row they own.
     await resetTenants([TENANT, OTHER_TENANT]);
-    await db.insert(schema.tenants).values([
+    await seedTenants([
       { id: TENANT, name: "Bom", subdomain: "bom", email: "b@bom.dz" },
       { id: OTHER_TENANT, name: "Bom Other", subdomain: "bomo", email: "o@bom.dz" },
     ]);

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { resetTenants } from "./db-cleanup";
+import { resetTenants, seedTenants } from "./db-cleanup";
 import { closeDb, getDb, initDb, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -47,7 +47,7 @@ beforeAll(async () => {
   await migrate();
   await runGlobal(async () => {
     await resetTenants([TENANT, OTHER]);
-    await getDb().insert(schema.tenants).values([
+    await seedTenants([
       { id: TENANT, name: "Search More", subdomain: "smore", email: "s@smore.dz" },
       { id: OTHER, name: "مؤسسة أخرى", subdomain: "other", email: "o@other.dz" },
     ]);

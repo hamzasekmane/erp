@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import { resetTenants } from "./db-cleanup";
+import { resetTenants, seedTenants } from "./db-cleanup";
 import { closeDb, getDb, initDb, resolvePublicTokenScope, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -90,7 +90,7 @@ async function seed(): Promise<void> {
     // Re-runnable against a shared server: the suite seeds fixed ids, and a
     // second run used to fail on tenants_pkey. Cascades to every row below.
     await resetTenants([TENANT_A, TENANT_B]);
-    await db.insert(schema.tenants).values([
+    await seedTenants([
       { id: TENANT_A, name: "RLS A", subdomain: "rls-a", email: "a@rls.dz" },
       { id: TENANT_B, name: "RLS B", subdomain: "rls-b", email: "b@rls.dz" },
     ]);
