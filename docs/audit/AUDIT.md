@@ -687,6 +687,66 @@ assertion now compares A's row count before and after instead of hardcoding 1 �
 stricter, and no longer broken by a table that legitimately holds several rows
 per tenant.
 
+### 17.0g Phase 3, third algorithm module — search with Arabic normalization (DONE)
+
+Eleven modules searched with a copy-pasted `lower(col) like '%term%'`. That had
+three distinct problems, and only the first is about speed:
+
+1. **No index could be used** — a leading `%` defeats a btree. The planner chose
+   `Seq Scan` on 20 000 rows.
+2. **Arabic spellings did not match.** `أحمد` and `احمد` are the same person.
+   pg_trgm does not fix this either: measured here,
+   `similarity('دراجة هوائية','دراجه هوائيه')` = **0.53**, because trigrams are
+   computed on raw characters. A user omitting the hamza got **zero rows** while
+   the row sat in the table.
+3. **The query was spliced into a LIKE pattern**, so searching `50%` matched
+   everything.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Framework-agnostic library | ✅ | `server/lib/algorithms/search.ts` |
+| Arabic + Latin normalization | ✅ | diacritics, alef forms, hamza carriers, maqsura, taa marbuta, tatweel, Arabic-Indic digits, NFKC/NFD |
+| Prefix trie with completions and bounded fuzzy match | ✅ | `SearchTrie`, pruned DP walk |
+| SQL mirror, `IMMUTABLE` | ✅ | `search_normalize()`, migration 0013 |
+| JS/SQL agreement asserted | ✅ | 25 spellings, per-spelling comparison |
+| Indexed columns | ✅ | `products.search_text`, `clients.search_text`, GIN `gin_trgm_ops` |
+| Query builder, LIKE-escaped | ✅ | `src/shared/search-filter.ts` |
+| Benchmark that prints the plan | ✅ | `npm run bench:search` |
+| Property-based tests | ✅ | trie vs brute force, insert/remove round-trip, idempotence |
+| ADR | ✅ | `docs/adr/0007-search-normalization.md` |
+
+**Test count:** 328 → 398 (18 files).
+
+**The most important test here is not "search finds something".** It is that
+`search_normalize()` in SQL and `normalizeSearchText()` in JS return the *same
+string* for 25 real spellings. Two implementations of one rule set is the risk
+this feature introduces, and reviewing them carefully is not a control — the
+comparison is. It caught a real divergence during development: `Café` came out
+as `café` in SQL because only the JS side decomposed accents at the time.
+
+**Order of rules turned out to matter, for a reason that took a test to see.**
+Running NFD first decomposes the hamza carriers (`أ` → `ا` + U+0654), so the alef
+rule appears to work through the diacritic strip instead of on its own. One
+consequence was visible immediately: `هوائية` normalized to `هواييه`. Folding
+the carriers explicitly, *before* any decomposition, made each rule something a
+reader and the SQL mirror can both see.
+
+**A data-model bug found by a test, not by review:** the trie returned *every*
+document passing through a terminal node, so `dragee` scored distance 0 against
+the query `drage`. Terminal nodes now carry the set of ids whose token actually
+ends there, separate from the set used for prefix search.
+
+**`pg_trgm` is a contrib extension and PGlite only exposes it if it is passed at
+construction** — `CREATE EXTENSION` alone fails with "not available". It is now
+registered in `initDb`. `unaccent` was deliberately *not* enabled: it is a
+second normalizer with its own opinions, and the mirror would then have three
+implementations to keep in step.
+
+**Gap left open, deliberately:** only `products` and `clients` are migrated. The
+other nine search paths still work for exactly-spelled text but carry the same
+two bugs. Migrating them is mechanical; they were left out to keep this slice
+reviewable.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
