@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { inArray } from "drizzle-orm";
 import { closeDb, getDb, initDb, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -33,6 +34,7 @@ beforeAll(async () => {
   await initDb();
   await migrate();
   await runGlobal(async () => {
+    await getDb().delete(schema.tenants).where(inArray(schema.tenants.id, [TENANT]));
     await getDb().insert(schema.tenants).values({ id: TENANT, name: "Search API", subdomain: "sapi", email: "s@sapi.dz" });
   });
   await runTenant(TENANT, async () => {

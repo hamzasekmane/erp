@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { closeDb, getDb, initDb, resolvePublicTokenScope, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -86,6 +86,9 @@ async function rawRows(statement: string): Promise<Array<Record<string, unknown>
 async function seed(): Promise<void> {
   await runGlobal(async () => {
     const db = getDb();
+    // Re-runnable against a shared server: the suite seeds fixed ids, and a
+    // second run used to fail on tenants_pkey. Cascades to every row below.
+    await db.delete(schema.tenants).where(inArray(schema.tenants.id, [TENANT_A, TENANT_B]));
     await db.insert(schema.tenants).values([
       { id: TENANT_A, name: "RLS A", subdomain: "rls-a", email: "a@rls.dz" },
       { id: TENANT_B, name: "RLS B", subdomain: "rls-b", email: "b@rls.dz" },
@@ -410,9 +413,23 @@ describe("RLS — the policy set is real and engaged", () => {
 
     expect(Number(a)).toBe(1);
     expect(Number(b)).toBe(1);
-    // Outside any scope, as the superuser, both rows are visible: proof the
-    // scoped runs were actually filtered rather than the table being empty.
-    expect(Number(outside)).toBe(2);
+    // Outside any scope, as the superuser, both of THIS fixture's rows are
+    // visible: proof the scoped runs were actually filtered rather than the
+    // table being empty.
+    //
+    // Scoped to the two fixture tenants rather than counting the whole table.
+    // The earlier `expect(outside).toBe(2)` silently assumed this suite owned
+    // the database, which held on PGlite (a per-process file) and broke the
+    // first time the suite ran against a shared PostgreSQL server, where other
+    // suites' clients are visible to a superuser too. The assertion was wrong,
+    // not the isolation.
+    const fixtureRows = await runGlobal(async () =>
+      (await rawRows(`select count(*)::int as n from clients where tenant_id in ('${TENANT_A}', '${TENANT_B}')`))[0]?.n,
+    );
+    expect(Number(fixtureRows)).toBe(2);
+    // And the unfiltered count must be at least that, i.e. the superuser sees
+    // more than a tenant does — which is the property under test.
+    expect(Number(outside)).toBeGreaterThanOrEqual(2);
   });
 });
 

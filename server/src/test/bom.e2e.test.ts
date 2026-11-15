@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { closeDb, getDb, initDb, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -44,6 +44,10 @@ beforeAll(async () => {
   await migrate();
   await runGlobal(async () => {
     const db = getDb();
+    // Re-runnable: the whole suite shares one database on a real server, so the
+    // second run would otherwise fail on tenants_pkey. Deleting the tenants
+    // cascades to every row they own.
+    await db.delete(schema.tenants).where(inArray(schema.tenants.id, [TENANT, OTHER_TENANT]));
     await db.insert(schema.tenants).values([
       { id: TENANT, name: "Bom", subdomain: "bom", email: "b@bom.dz" },
       { id: OTHER_TENANT, name: "Bom Other", subdomain: "bomo", email: "o@bom.dz" },

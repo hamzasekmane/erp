@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { closeDb, getDb, initDb, runGlobal, runTenant } from "../db/client";
 import { migrate } from "../db/migrate";
 import * as schema from "../db/schema";
@@ -45,6 +45,7 @@ beforeAll(async () => {
   await initDb();
   await migrate();
   await runGlobal(async () => {
+    await getDb().delete(schema.tenants).where(inArray(schema.tenants.id, [TENANT, OTHER]));
     await getDb().insert(schema.tenants).values([
       { id: TENANT, name: "Search More", subdomain: "smore", email: "s@smore.dz" },
       { id: OTHER, name: "مؤسسة أخرى", subdomain: "other", email: "o@other.dz" },
