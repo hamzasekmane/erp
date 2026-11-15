@@ -33,13 +33,27 @@ export function escapeLike(value: string): string {
 
 export type SearchOptions = {
   /**
-   * Extra, non-normalized columns to match with a plain LIKE, e.g. email or
-   * phone. These are compared raw on purpose: normalizing a phone number
-   * converts its Arabic-Indic digits, which is right, but normalizing an email
-   * would also strip accents from a local part where they may be significant.
-   * They are also lowercased when `lowercaseExtras` is set.
+   * Extra, non-normalized columns to match with a plain LIKE, e.g. phone or a
+   * JOINed table's name.
+   *
+   * Two kinds appear here and they are not interchangeable:
+   *
+   * - `normalized` columns belong to a table that has a `search_text` column.
+   *   They must be put in their own AND-ed alternative, because the column
+   *   holds its whole row's text: comparing it against a single token would
+   *   match any row containing any of the words.
+   * - `raw` columns (email, phone, reference, a JOINed client name) have no
+   *   normalized form, so the query is normalized and compared directly. Some
+   *   loss is unavoidable and is listed in ADR-0008: a phone number stored in
+   *   Arabic-Indic digits will not match an ASCII query through this path.
    */
   extras?: SQL[];
+  /**
+   * Whole-row search columns from other tables that already have their own
+   * `search_text`. For invoices and payments that is the client's name; it is
+   * searched as its own unit rather than per token, for the reason above.
+   */
+  normalizedExtras?: Array<Column | SQL>;
 };
 
 /**
@@ -64,13 +78,25 @@ export function buildSearchFilter(
   if (tokens.length === 0) return undefined;
 
   const extras = options.extras ?? [];
-  const conditions = tokens.map((token) => {
+  const normalizedExtras = options.normalizedExtras ?? [];
+  const phrase = tokens.join(" ");
+
+  // A row matches if its own columns satisfy every token, or if one of its
+  // related tables contains all of them in one field. The second branch is a
+  // single group, not a per-token one: see the note on `normalizedExtras`.
+  const perToken = tokens.map((token) => {
     const pattern = `%${escapeLike(token)}%`;
     const parts: SQL[] = [sql`${normalizedColumn} like ${pattern}`];
     for (const extra of extras) parts.push(sql`${extra} like ${pattern}`);
-    // Every token must appear somewhere in the row.
     return parts.length === 1 ? parts[0]! : sql`(${sql.join(parts, sql` or `)})`;
   });
 
-  return conditions.length === 1 ? conditions[0]! : sql`(${sql.join(conditions, sql` and `)})`;
+  const branches: SQL[] = [sql`(${sql.join(perToken, sql` and `)})`];
+  if (normalizedExtras.length > 0) {
+    const pattern = `%${escapeLike(phrase)}%`;
+    const related = normalizedExtras.map((extra) => sql`${extra} like ${pattern}`);
+    branches.push(related.length === 1 ? related[0]! : sql`(${sql.join(related, sql` or `)})`);
+  }
+
+  return branches.length === 1 ? branches[0]! : sql`(${sql.join(branches, sql` or `)})`;
 }

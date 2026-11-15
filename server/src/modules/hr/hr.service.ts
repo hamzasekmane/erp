@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { attendanceRecords, departments, employeeContracts, employees, leaveRequests } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
@@ -75,16 +76,8 @@ export class HrService {
     const filters: SQL[] = [eq(employees.tenantId, ctx.tenantId), isNull(employees.deletedAt)];
     if (query.departmentId) filters.push(eq(employees.departmentId, query.departmentId));
     if (query.status) filters.push(eq(employees.status, query.status));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(
-        sql`lower(${employees.firstName}) like ${term}`,
-        sql`lower(${employees.lastName}) like ${term}`,
-        sql`lower(${employees.code}) like ${term}`,
-        sql`lower(coalesce(${employees.email}, '')) like ${term}`,
-      );
-      if (search) filters.push(search);
-    }
+    const search = buildSearchFilter(query.search, employees.searchText);
+    if (search) filters.push(search);
     const where = and(...filters);
     const [rows, [countRow]] = await Promise.all([
       db

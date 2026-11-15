@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import {
@@ -16,6 +16,7 @@ import {
 import { audit } from "../../shared/audit";
 import { secretsConfigured, encryptSecret } from "../../shared/security/secrets";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
@@ -94,13 +95,14 @@ export class PaymentsService {
     if (query.minAmount) filters.push(gte(payments.amountMinor, toMinor(Number(query.minAmount))));
     if (query.maxAmount) filters.push(lte(payments.amountMinor, toMinor(Number(query.maxAmount))));
     if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(
-        sql`lower(${payments.number}) like ${term}`,
-        sql`lower(coalesce(${payments.reference}, '')) like ${term}`,
-        sql`lower(coalesce(${clients.name}, '')) like ${term}`,
-        sql`lower(coalesce(${invoices.number}, '')) like ${term}`,
-      );
+      const search = buildSearchFilter(query.search, payments.searchText, {
+        // Payment number and reference are folded into payments.search_text.
+        // The client comes through a JOIN (its own normalized column); the
+        // invoice number is raw because invoices' search_text is whole-row and
+        // mixing it in per token would match on any word of the invoice.
+        normalizedExtras: [clients.searchText],
+        extras: [sql`lower(coalesce(${invoices.number}, ''))`],
+      });
       if (search) filters.push(search);
     }
     const where = and(...filters);

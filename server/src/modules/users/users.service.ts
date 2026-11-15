@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { plans, sessions, subscriptions, users } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { hashPassword, passwordIssues, verifyPassword } from "../../shared/security/password";
@@ -28,11 +29,8 @@ export class UsersService {
     const filters: SQL[] = [eq(users.tenantId, ctx.tenantId), isNull(users.deletedAt)];
     if (query.role) filters.push(eq(users.role, query.role));
     if (query.status) filters.push(eq(users.status, query.status));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${users.name}) like ${term}`, sql`lower(${users.email}) like ${term}`);
-      if (search) filters.push(search);
-    }
+    const search = buildSearchFilter(query.search, users.searchText);
+    if (search) filters.push(search);
     const where = and(...filters);
 
     const [rows, [countRow]] = await Promise.all([

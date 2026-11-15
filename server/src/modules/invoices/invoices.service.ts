@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 import type { Response } from "express";
@@ -19,6 +19,7 @@ import {
 } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import {
@@ -878,12 +879,13 @@ export class InvoicesService {
     if (query.minAmount) filters.push(gte(invoices.totalMinor, toMinor(Number(query.minAmount))));
     if (query.maxAmount) filters.push(lte(invoices.totalMinor, toMinor(Number(query.maxAmount))));
     if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(
-        sql`lower(${invoices.number}) like ${term}`,
-        sql`lower(coalesce(${clients.name}, '')) like ${term}`,
-        sql`lower(coalesce(${clients.email}, '')) like ${term}`,
-      );
+      const search = buildSearchFilter(query.search, invoices.searchText, {
+        // The invoice's own text is folded, so "ف-2026" and "ف 2026" agree.
+        // The client is reached through a JOIN and has its own search_text;
+        // the email is raw because a local part must not be folded.
+        normalizedExtras: [clients.searchText],
+        extras: [sql`lower(coalesce(${clients.email}, ''))`],
+      });
       if (search) filters.push(search);
     }
     return filters;

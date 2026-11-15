@@ -93,6 +93,23 @@ async function main(): Promise<void> {
     }
     console.log(`  ${created.toLocaleString()} products loaded\n`);
 
+    // A second table with a multi-column source, to prove the concatenation
+    // covers every declared column rather than only the first.
+    await db.execute(sql`delete from employees where tenant_id = ${TENANT}`);
+    await db.execute(sql`delete from departments where tenant_id = ${TENANT}`);
+    await db.execute(sql`insert into departments (id, tenant_id, name) values ('bd-1', ${TENANT}, 'Production')`);
+    const employeeRows: string[] = [];
+    for (let index = 0; index < 2_000; index += 1) {
+      const first = NAMES[index % NAMES.length];
+      const last = index % 5 === 0 ? "بن علي" : "Haddad";
+      employeeRows.push(`('be-${index}', '${TENANT}', 'EMP-${index}', '${first}', '${last}', '2026-01-01', 'bd-1')`);
+    }
+    await db.execute(
+      sql.raw(
+        `insert into employees (id, tenant_id, code, first_name, last_name, hire_date, department_id) values ${employeeRows.join(",")}`,
+      ),
+    );
+
     // The trigger populated search_text on insert; verify rather than assume.
     const nulls = rowsOf(
       await db.execute(sql`select count(*)::int as n from products where search_text is null`),
@@ -156,6 +173,25 @@ async function main(): Promise<void> {
 
   // The timings only mean something if the planner really used the index, so
   // read the plan rather than assuming it.
+  console.log("\nmulti-column source (employees: first_name + last_name + code + email)");
+  const lastNameHit = await time("last name only, which is the 2nd column", async () => {
+    const result = await getDb().execute(sql`select count(*)::int as n from employees where search_text like ${`%${normalizeSearchText("بن علي")}%`}`);
+    return rowsOf(result)[0]!.n as number;
+  });
+  const firstInitial = await time("first name only, which is the 1st", async () => {
+    const result = await getDb().execute(sql`select count(*)::int as n from employees where search_text like ${`%${normalizeSearchText("مصطفي")}%`}`);
+    return rowsOf(result)[0]!.n as number;
+  });
+  console.log(
+    `  Searching the SECOND column finds ${lastNameHit.matches} rows and the first finds ${firstInitial.matches};`,
+  );
+  console.log(`  both non-zero is the check that the whole row is indexed, not just its first field.`);
+  const oldLast = await time("old path, last name (lower(last_name))", async () => {
+    const result = await getDb().execute(sql`select count(*)::int as n from employees where lower(last_name) like ${`%${normalizeSearchText("بن علي")}%`}`);
+    return rowsOf(result)[0]!.n as number;
+  });
+  console.log(`  the old path needed a separate lower(last_name) clause to match this at all (${oldLast.matches} rows).`);
+
   console.log("\nplan — is the index actually used?");
   const planOf = async (label: string, query: string, params: string[]) => {
     const result = await getDb().execute(sql.raw(`explain (analyze, costs off) ${query}`));

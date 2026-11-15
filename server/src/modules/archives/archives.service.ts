@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { archiveDocuments } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { AppError } from "../../shared/errors";
+import { buildSearchFilter } from "../../shared/search-filter";
 import { newId } from "../../shared/ids";
 import { paginate } from "../../shared/http";
 
@@ -16,11 +17,8 @@ export class ArchivesService {
     const db = getDb();
     const filters: SQL[] = [eq(archiveDocuments.tenantId, ctx.tenantId), isNull(archiveDocuments.deletedAt)];
     if (query.category) filters.push(eq(archiveDocuments.category, query.category));
-    if (query.search) {
-      const term = `%${query.search.toLowerCase()}%`;
-      const search = or(sql`lower(${archiveDocuments.name}) like ${term}`, sql`lower(coalesce(${archiveDocuments.description}, '')) like ${term}`);
-      if (search) filters.push(search);
-    }
+    const search = buildSearchFilter(query.search, archiveDocuments.searchText);
+    if (search) filters.push(search);
     const where = and(...filters);
     const [rows, [countRow]] = await Promise.all([
       db.select().from(archiveDocuments).where(where).orderBy(desc(archiveDocuments.createdAt)).limit(query.limit).offset(query.offset),
