@@ -74,6 +74,21 @@ const VIA_PARENT: Array<{ table: string; parent: string; fk: string }> = [
 /** Global reference data: readable by every authenticated tenant, never tenant-scoped. */
 const GLOBAL = ["plans"] as const;
 
+/**
+ * Tables added after 0007. Each batch gets its own generated migration, because
+ * 0007 has already run in environments and a migration is immutable once
+ * applied. A new table with no policy is silently unprotected, and the drift
+ * guard above cannot tell "deliberately excluded" from "forgotten", so every
+ * wave is emitted explicitly.
+ */
+const WAVES: Array<{ tag: string; direct: string[]; viaParent: Array<{ table: string; parent: string; fk: string }> }> = [
+  {
+    tag: "0010_rls_ledger",
+    direct: ["accounts", "account_closure", "journal_entries", "journal_lines", "accounting_periods"],
+    viaParent: [],
+  },
+];
+
 const APP_ROLE = "erp_app";
 const SETTING = "current_setting('app.tenant_id', true)";
 
@@ -126,6 +141,7 @@ function assertNoDrift(): void {
     ...VIA_PARENT.map((entry) => entry.table),
     ...GLOBAL,
     "tenants",
+    ...WAVES.flatMap((wave) => [...wave.direct, ...wave.viaParent.map((entry) => entry.table)]),
   ]);
   const actual: string[] = [];
   for (const value of Object.values(schema)) {
@@ -256,3 +272,43 @@ writeFileSync(out, sql, "utf8");
 console.log(`wrote ${out}`);
 console.log(`tables covered: ${DIRECT.length} direct, ${VIA_PARENT.length} via parent, 1 self (tenants), ${GLOBAL.length} global (excluded)`);
 console.log(`policy count: ${DIRECT.length + VIA_PARENT.length + 1}`);
+
+/*
+ * One migration per wave. The role already exists (0007 creates it), so a wave
+ * only needs: policies, and grants (otherwise the app role is denied outright,
+ * which is a hard 500 rather than the fail-closed empty result).
+ */
+for (const wave of WAVES) {
+  const waveLines: string[] = [];
+  waveLines.push(`-- Row-Level Security for tables introduced after 0007.
+--
+-- GENERATED FILE - do not edit by hand.
+-- Regenerate with: npm run db:generate-rls
+--
+-- Why a second migration: 0007 is already applied in environments and must not
+-- be edited. Granting nothing to "${APP_ROLE}" on a new table is not "fail
+-- closed" - it is "permission denied", a 500 on every request that touches it.
+-- Policies plus grants must therefore be added in the same wave that adds the
+-- table.
+
+/* ------------------------------------------------------------------ */
+/* Policies                                                            */
+/* ------------------------------------------------------------------ */
+`);
+
+  for (const table of wave.direct) waveLines.push(directPolicy(table));
+  for (const entry of wave.viaParent) waveLines.push(parentPolicy(entry.table, entry.parent, entry.fk));
+
+  const waveTables = [...wave.direct, ...wave.viaParent.map((entry) => entry.table)];
+  waveLines.push(`
+/* ------------------------------------------------------------------ */
+/* Privileges                                                          */
+/* ------------------------------------------------------------------ */
+${waveTables.map((table) => `GRANT SELECT, INSERT, UPDATE, DELETE ON "${table}" TO ${APP_ROLE};`).join("\n")}
+`);
+
+  const waveSql = `${waveLines.join("\n")}\n`;
+  const waveOut = join(process.cwd(), "drizzle", `${wave.tag}.sql`);
+  writeFileSync(waveOut, waveSql, "utf8");
+  console.log(`wrote ${waveOut} (${wave.direct.length + wave.viaParent.length} policies, ${waveTables.length} tables granted)`);
+}

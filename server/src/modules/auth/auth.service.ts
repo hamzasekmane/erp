@@ -13,6 +13,7 @@ import {
   users,
 } from "../../db/schema";
 import { audit } from "../../shared/audit";
+import { LedgerSetupService } from "../ledger/ledger-setup.service";
 import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
 import { hashPassword, passwordIssues, verifyPassword } from "../../shared/security/password";
@@ -65,6 +66,8 @@ function slugify(input: string): string {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+
+  constructor(private readonly ledgerSetup: LedgerSetupService) {}
 
   /* ------------------------------------------------------------------ */
   /* Registration                                                        */
@@ -142,6 +145,11 @@ export class AuthService {
       await tx.insert(paymentMethods).values(
         DEFAULT_PAYMENT_METHODS.map((method) => ({ id: newId(), tenantId, ...method })),
       );
+
+      // The chart of accounts is part of tenant creation, in the SAME
+      // transaction. A tenant without a chart cannot post, and the failure
+      // would surface much later as a 422 on the first invoice.
+      await this.ledgerSetup.initialiseChart(tenantId, { tx });
     });
 
     await audit({

@@ -20,6 +20,7 @@ import { newId } from "../../shared/ids";
 import { paginate, type Pagination } from "../../shared/http";
 import { fromMinor, toMinor } from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
+import { LedgerService } from "../ledger/ledger.service";
 import type { CreatePaymentInput, GatewayInput, RefundInput, UpdatePaymentInput } from "./payments.dto";
 
 type Ctx = { tenantId: string; userId: string | null; ip?: string | null; userAgent?: string | null };
@@ -79,6 +80,8 @@ function serializePayment(row: PaymentRow) {
 
 @Injectable()
 export class PaymentsService {
+  constructor(private readonly ledger: LedgerService) {}
+
   async list(ctx: Ctx, query: PaymentListQuery): Promise<{ items: ReturnType<typeof serializePayment>[]; pagination: Pagination }> {
     const db = getDb();
     const filters: SQL[] = [eq(payments.tenantId, ctx.tenantId)];
@@ -242,6 +245,20 @@ export class PaymentsService {
         toStatus: nextStatus,
         actorId: ctx.userId,
         reason: `Paiement ${number}`,
+      });
+
+      // Posted in the same transaction as the settlement: a payment can never
+      // exist without the entry that records the cash arriving.
+      await this.ledger.postPayment(tx, {
+        tenantId: ctx.tenantId,
+        paymentId,
+        paymentNumber: number,
+        entryDate: paidAt.toISOString().slice(0, 10),
+        amountMinor,
+        // The payment method decides cash vs bank. Unknown methods (mobile
+        // money, cheques) settle to bank: they are not physical cash.
+        accountKind: input.method.toUpperCase() === "CASH" ? "cash" : "bank",
+        createdBy: ctx.userId,
       });
     });
 

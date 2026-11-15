@@ -19,6 +19,7 @@ import { OutboxModule } from "./modules/outbox/outbox.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
 import { HrModule } from "./modules/hr/hr.module";
 import { InvoicesModule } from "./modules/invoices/invoices.module";
+import { LedgerModule } from "./modules/ledger/ledger.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { ReportsModule } from "./modules/reports/reports.module";
@@ -27,7 +28,7 @@ import { TenancyModule } from "./modules/tenancy/tenancy.module";
 import { UsersModule } from "./modules/users/users.module";
 
 @Module({
-  imports: [MailModule, AuthModule, AdminModule, TenancyModule, UsersModule, ClientsModule, CatalogModule, InvoicesModule, PaymentsModule, DashboardModule, ReportsModule, ClientGroupsModule, ClientNotesModule, NotificationsModule, HrModule, SupportModule, ArchivesModule, ApiKeysModule, DocsModule, OutboxModule, UploadsModule, MaintenanceModule, HealthModule],
+  imports: [MailModule, AuthModule, AdminModule, TenancyModule, UsersModule, ClientsModule, CatalogModule, InvoicesModule, PaymentsModule, LedgerModule, DashboardModule, ReportsModule, ClientGroupsModule, ClientNotesModule, NotificationsModule, HrModule, SupportModule, ArchivesModule, ApiKeysModule, DocsModule, OutboxModule, UploadsModule, MaintenanceModule, HealthModule],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule implements NestModule {

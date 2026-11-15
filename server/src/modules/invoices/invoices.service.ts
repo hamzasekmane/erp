@@ -33,6 +33,7 @@ import {
 } from "../../shared/money";
 import { documentNumber } from "../../shared/numbering";
 import { hashToken } from "../../shared/security/tokens";
+import { LedgerService } from "../ledger/ledger.service";
 import { PaymentsService } from "../payments/payments.service";
 import type { CreateInvoiceInput, InvoiceItemInput, SendInvoiceInput, UpdateInvoiceInput } from "./invoices.dto";
 
@@ -120,7 +121,10 @@ function computeLines(items: InvoiceItemInput[], discount: number, shipping: num
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   /* -------------------------------- reads ----------------------------- */
 
@@ -503,6 +507,24 @@ export class InvoicesService {
         actorId: ctx.userId,
         reason: "Création",
       });
+
+      // The ledger entry is written in the SAME transaction as the invoice, so
+      // an invoice can never exist without its entry. Drafts are not posted:
+      // nothing has been billed yet, so there is nothing to account for.
+      if (status !== "draft") {
+        await this.ledger.postInvoice(tx, {
+          tenantId: ctx.tenantId,
+          invoiceId: id,
+          invoiceNumber: number,
+          entryDate: issueDate,
+          subtotalMinor,
+          discountMinor: globalDiscountMinor,
+          shippingMinor,
+          taxMinor,
+          totalMinor,
+          createdBy: ctx.userId,
+        });
+      }
     });
 
     await audit({ tenantId: ctx.tenantId, actorId: ctx.userId, action: "invoice.created", entity: "invoice", entityId: id, after: { number, total: fromMinor(totalMinor) }, ip: ctx.ip, userAgent: ctx.userAgent });
