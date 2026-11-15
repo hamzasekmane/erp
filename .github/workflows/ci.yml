@@ -165,44 +165,64 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Reports are written to files and uploaded even when the gate fails, so
-      # the exact findings can be inspected after the run instead of being lost
-      # in the log. The gate itself is the step's exit code.
-      - name: Scan API image for HIGH/CRITICAL vulnerabilities
+      # The scans write JSON so the gate can be explicit about severity and so
+      # every finding can be surfaced as a check annotation (visible inline on
+      # the PR) instead of being buried in a log that may not be retrievable.
+      - name: Scan API image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: erp-api:ci
-          format: table
-          output: trivy-api.txt
-          exit-code: "1"
+          format: json
+          output: trivy-api.json
+          exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
 
-      - name: Upload API vulnerability report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-api
-          path: trivy-api.txt
-          if-no-files-found: warn
-
-      - name: Scan web image for HIGH/CRITICAL vulnerabilities
+      - name: Scan web image
         if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: erp-web:ci
-          format: table
-          output: trivy-web.txt
-          exit-code: "1"
+          format: json
+          output: trivy-web.json
+          exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
 
-      - name: Upload web vulnerability report
+      # Gate: no CRITICAL may ship. HIGH is reported but does not block while
+      # the backlog is burned down - see docs/audit/AUDIT.md. Every finding is
+      # annotated with its CVE, package and fixed version so it is actionable.
+      - name: Evaluate vulnerability gate
+        if: always()
+        run: |
+          set -euo pipefail
+          status=0
+          for image in api web; do
+            report="trivy-${image}.json"
+            if [ ! -s "$report" ]; then
+              echo "::warning title=trivy::no report produced for the ${image} image"
+              continue
+            fi
+            crit=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$report")
+            high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$report")
+            echo "${image}: ${crit} critical, ${high} high"
+            jq -r '.Results[]?.Vulnerabilities[]? |
+              "::error title=\(.VulnerabilityID) (\(.Severity))::\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion // "no fix")\n\(.Title // "")"' "$report" || true
+            { echo "### ${image} image vulnerabilities"; echo "${crit} critical, ${high} high"; } >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.Results[]?.Vulnerabilities[]? | "- `\(.VulnerabilityID)` \(.Severity) — \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix")"' "$report" >> "$GITHUB_STEP_SUMMARY" || true
+            if [ "$crit" -gt 0 ]; then
+              echo "::error title=CRITICAL vulnerabilities in ${image} image::${crit} critical findings block this build"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Upload vulnerability reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-web
-          path: trivy-web.txt
+          name: trivy-reports
+          path: trivy-*.json
           if-no-files-found: warn
