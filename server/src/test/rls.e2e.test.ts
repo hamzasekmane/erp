@@ -36,6 +36,7 @@ const TENANT_TABLES = [
   "products",
   "stock_levels",
   "stock_movements",
+  "bom_lines",
   "number_sequences",
   "invoices",
   "payments",
@@ -137,6 +138,24 @@ async function seed(): Promise<void> {
         productId: `product-${suffix}`,
         type: "in",
         quantity: "10",
+      });
+      // A BOM line needs a distinct parent and child, so a second product per
+      // tenant. Scrap and quantity are exercised by the catalog e2e tests.
+      await db.insert(schema.products).values({
+        id: `product-${suffix}-part`,
+        tenantId,
+        code: `PP-${suffix.toUpperCase()}`,
+        name: `Part ${suffix.toUpperCase()}`,
+        priceMinor: 400,
+        costMinor: 200,
+      });
+      await db.insert(schema.bomLines).values({
+        id: `bom-${suffix}`,
+        tenantId,
+        parentId: `product-${suffix}`,
+        childId: `product-${suffix}-part`,
+        quantity: "2",
+        scrapBp: 100,
       });
       await db.insert(schema.numberSequences).values({ tenantId, docType: `doc-${suffix}`, period: "2099", nextValue: 2 });
       await db.insert(schema.invoices).values({
@@ -400,6 +419,14 @@ describe("RLS — the policy set is real and engaged", () => {
 describe("RLS — cross-tenant leaks are impossible", () => {
   for (const table of TENANT_TABLES) {
     it(`${table}: tenant B cannot read, update or delete tenant A rows`, async () => {
+      // Count what tenant A owns first, rather than assuming one row: a table
+      // that legitimately holds several rows per tenant must not need a test
+      // edit, and "A's rows are all still there" is the invariant that matters.
+      const beforeCount = await runGlobal(async () =>
+        Number((await rawRows(`select count(*)::int as n from "${table}" where tenant_id = '${TENANT_A}'`))[0]?.n),
+      );
+      expect(beforeCount).toBeGreaterThan(0);
+
       await runTenant(TENANT_B, async () => {
         const before = await rawRows(`select count(*)::int as n from "${table}"`);
         // Tenant B must see none of tenant A's rows.
@@ -420,7 +447,7 @@ describe("RLS — cross-tenant leaks are impossible", () => {
 
       await runGlobal(async () => {
         const stillThere = await rawRows(`select count(*)::int as n from "${table}" where tenant_id = '${TENANT_A}'`);
-        expect(Number(stillThere[0]?.n)).toBe(1);
+        expect(Number(stillThere[0]?.n)).toBe(beforeCount);
       });
     });
   }

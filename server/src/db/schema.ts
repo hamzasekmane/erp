@@ -439,6 +439,43 @@ export const stockLevels = pgTable(
   ],
 );
 
+/**
+ * Bill of materials: one row is "one unit of `parentId` needs `quantity` of
+ * `childId`". Quantities are numeric(18,3) to match stock_levels, so a BOM can
+ * call for 2.5 m of cable without special casing.
+ *
+ * The graph is validated in the application (lib/algorithms/bom.ts); the
+ * database enforces the two invariants it can express cheaply: no self
+ * reference, and no duplicate parent/child pair. A duplicate would silently
+ * mean something different (sum vs replace) depending on the code path, so it
+ * is rejected rather than added up.
+ */
+export const bomLines = pgTable(
+  "bom_lines",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    parentId: text("parent_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    childId: text("child_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull(),
+    /** Scrap allowance in basis points: 500 = 5% extra is consumed. */
+    scrapBp: integer("scrap_bp").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("bom_lines_edge_uq").on(t.tenantId, t.parentId, t.childId),
+    index("bom_lines_child_idx").on(t.tenantId, t.childId),
+    check("bom_lines_quantity_chk", sql`${t.quantity} > 0`),
+    check("bom_lines_scrap_chk", sql`${t.scrapBp} >= 0 and ${t.scrapBp} <= 10000`),
+    check("bom_lines_no_self_ref_chk", sql`${t.parentId} <> ${t.childId}`),
+  ],
+);
+
 export const stockMovements = pgTable(
   "stock_movements",
   {

@@ -87,6 +87,12 @@ const WAVES: Array<{ tag: string; direct: string[]; viaParent: Array<{ table: st
     direct: ["accounts", "account_closure", "journal_entries", "journal_lines", "accounting_periods"],
     viaParent: [],
   },
+  {
+    // A wave must not edit 0007: it is already applied in every environment.
+    tag: "0012_rls_bom",
+    direct: ["bom_lines"],
+    viaParent: [],
+  },
 ];
 
 const APP_ROLE = "erp_app";
