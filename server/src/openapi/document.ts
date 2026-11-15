@@ -2,7 +2,7 @@ import { OpenApiGeneratorV31, OpenAPIRegistry, extendZodWithOpenApi } from "@ast
 import { z } from "zod";
 import { createCheckoutSchema } from "../modules/payments/chargily/chargily.schema";
 import { createClientSchema, updateClientSchema } from "../modules/clients/clients.dto";
-import { createProductSchema, createCategorySchema, createTaxSchema } from "../modules/catalog/catalog.dto";
+import { createProductSchema, createCategorySchema, createTaxSchema, replaceBomSchema } from "../modules/catalog/catalog.dto";
 import { createInvoiceSchema, createPublicLinkSchema, updateInvoiceSchema } from "../modules/invoices/invoices.dto";
 import { createPaymentSchema, gatewaySchema, refundSchema } from "../modules/payments/payments.dto";
 import {
@@ -131,6 +131,16 @@ register("get", "/products", "Catalog", "Lister les produits", { query: pageQuer
 register("get", "/products/stats", "Catalog", "Statistiques produits");
 register("get", "/products/stock/valuation", "Catalog", "Valorisation du stock (fifo, lifo, wac, fefo)");
 register("get", "/products/stock/valuation/layers", "Catalog", "Couches de coût par produit");
+register("get", "/products/:id/bom", "Catalog", "Nomenclature d'un produit", { params: idParams });
+register("put", "/products/:id/bom", "Catalog", "Remplacer la nomenclature (refusée entière en cas de cycle)", {
+  params: idParams,
+  body: replaceBomSchema,
+});
+register("delete", "/products/:id/bom/:childId", "Catalog", "Supprimer un composant", { params: idParams });
+register("get", "/products/:id/bom/explosion", "Catalog", "Explosion de la nomenclature", { params: idParams });
+register("get", "/products/:id/bom/requirements", "Catalog", "Besoin net après stock disponible", { params: idParams });
+register("get", "/products/:id/bom/where-used", "Catalog", "Où ce composant est utilisé", { params: idParams });
+register("get", "/products/:id/bom/cost", "Catalog", "Coût déroulé depuis la nomenclature", { params: idParams });
 register("post", "/products", "Catalog", "Créer un produit", { body: createProductSchema });
 register("put", "/products/:id", "Catalog", "Modifier un produit", { params: idParams });
 register("patch", "/products/:id/status", "Catalog", "Activer/désactiver un produit", { params: idParams });

@@ -6,6 +6,7 @@ import { CurrentAuth, RequirePermissions, type AuthContext } from "../../shared/
 import { PERMISSIONS } from "../../shared/security/permissions";
 import { ZodValidationPipe } from "../../shared/validation";
 import {
+  bomExplosionQuerySchema,
   createCategorySchema,
   createProductSchema,
   createTaxSchema,
@@ -13,17 +14,21 @@ import {
   updateCategorySchema,
   updateProductSchema,
   updateProductStatusSchema,
+  replaceBomSchema,
   updateTaxSchema,
+  type BomExplosionQuery,
   type CreateCategoryInput,
   type CreateProductInput,
   type CreateTaxInput,
   type StockMovementInput,
   type UpdateCategoryInput,
   type UpdateProductInput,
+  type ReplaceBomInput,
   type UpdateTaxInput,
 } from "./catalog.dto";
 import { CatalogService } from "./catalog.service";
 import { StockValuationService } from "./stock-valuation.service";
+import { BomService } from "./bom.service";
 import type { CostingMethod } from "../../../lib/algorithms/valuation";
 
 /** Only these four are accepted; anything else is a client error, not a default. */
@@ -42,6 +47,7 @@ export class ProductsController {
   constructor(
     private readonly catalog: CatalogService,
     private readonly valuation: StockValuationService,
+    private readonly bom: BomService,
   ) {}
 
   @Get()
@@ -101,6 +107,76 @@ export class ProductsController {
         layers: product.layers,
       })),
     });
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Bill of materials                                                */
+  /* ---------------------------------------------------------------- */
+
+  @Get(":id/bom")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async bomLines(@CurrentAuth() auth: AuthContext, @Param("id") id: string) {
+    return ok(await this.bom.list({ tenantId: auth.tenantId }, id));
+  }
+
+  /** Replaces the component list in one call; a cycle is rejected whole. */
+  @Put(":id/bom")
+  @RequirePermissions(PERMISSIONS.catalogWrite)
+  async replaceBom(
+    @CurrentAuth() auth: AuthContext,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(replaceBomSchema)) body: ReplaceBomInput,
+  ) {
+    return ok(await this.bom.replace({ tenantId: auth.tenantId, userId: auth.userId }, id, body.lines), "Nomenclature enregistrée");
+  }
+
+  @Delete(":id/bom/:childId")
+  @RequirePermissions(PERMISSIONS.catalogWrite)
+  async deleteBomLine(@CurrentAuth() auth: AuthContext, @Param("id") id: string, @Param("childId") childId: string) {
+    await this.bom.remove({ tenantId: auth.tenantId }, id, childId);
+    return ok({ productId: id, childId }, "Ligne de nomenclature supprimée");
+  }
+
+  /** Full explosion: what `quantity` units of a product need, at every level. */
+  @Get(":id/bom/explosion")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async bomExplosion(
+    @CurrentAuth() auth: AuthContext,
+    @Param("id") id: string,
+    @Query(new ZodValidationPipe(bomExplosionQuerySchema)) query: BomExplosionQuery,
+  ) {
+    return ok(await this.bom.explosion({ tenantId: auth.tenantId }, id, query.quantity));
+  }
+
+  /** Net requirement against stock on hand: what actually has to be bought. */
+  @Get(":id/bom/requirements")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async bomRequirements(
+    @CurrentAuth() auth: AuthContext,
+    @Param("id") id: string,
+    @Query(new ZodValidationPipe(bomExplosionQuerySchema)) query: BomExplosionQuery,
+    @Query("includeAssemblies") includeAssemblies?: string,
+  ) {
+    return ok(
+      await this.bom.requirements(
+        { tenantId: auth.tenantId },
+        id,
+        query.quantity,
+        includeAssemblies === "true",
+      ),
+    );
+  }
+
+  @Get(":id/bom/where-used")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async bomWhereUsed(@CurrentAuth() auth: AuthContext, @Param("id") id: string) {
+    return ok(await this.bom.whereUsed({ tenantId: auth.tenantId }, id));
+  }
+
+  @Get(":id/bom/cost")
+  @RequirePermissions(PERMISSIONS.catalogRead)
+  async bomCost(@CurrentAuth() auth: AuthContext, @Param("id") id: string) {
+    return ok(await this.bom.cost({ tenantId: auth.tenantId }, id));
   }
 
   @Post()
