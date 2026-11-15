@@ -12,6 +12,9 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { getTableName, is } from "drizzle-orm";
+import { PgTable } from "drizzle-orm/pg-core";
+import * as schema from "../schema";
 
 /** Tables with their own `tenant_id` column. */
 const DIRECT = [
@@ -108,6 +111,44 @@ CREATE POLICY "${policy}" ON "${table}"
 
 const tables = [...DIRECT, "tenants", ...VIA_PARENT.map((entry) => entry.table), ...GLOBAL];
 
+
+/**
+ * Drift guard.
+ *
+ * The lists above are the policy contract, but the schema is what actually
+ * exists. A table added to `schema.ts` and forgotten here would ship with no
+ * policy at all - the exact silent failure this whole mechanism exists to
+ * prevent - so the generator refuses to run when the two disagree.
+ */
+function assertNoDrift(): void {
+  const declared = new Set<string>([
+    ...DIRECT,
+    ...VIA_PARENT.map((entry) => entry.table),
+    ...GLOBAL,
+    "tenants",
+  ]);
+  const actual: string[] = [];
+  for (const value of Object.values(schema)) {
+    if (is(value, PgTable)) actual.push(getTableName(value));
+  }
+
+  const missing = actual.filter((table) => !declared.has(table));
+  const unknown = [...declared].filter((table) => !actual.includes(table));
+  const problems: string[] = [];
+  if (missing.length > 0) {
+    problems.push(
+      `tables in schema.ts with NO policy (classify each in DIRECT, VIA_PARENT or GLOBAL): ${missing.join(", ")}`,
+    );
+  }
+  if (unknown.length > 0) {
+    problems.push(`tables declared here that do not exist in schema.ts: ${unknown.join(", ")}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(`RLS policy list is out of date.\n  - ${problems.join("\n  - ")}`);
+  }
+}
+
+assertNoDrift();
 
 const lines: string[] = [];
 lines.push(`-- Row-Level Security for tenant isolation.
