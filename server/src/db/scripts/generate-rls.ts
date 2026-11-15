@@ -1,0 +1,217 @@
+/**
+ * Generates the Row-Level Security migration.
+ *
+ * Exists as a script rather than hand-written SQL because the policy set is
+ * mechanical and must stay in lockstep with the schema: 33 tables carry their
+ * own `tenant_id`, 8 child tables reach the tenant through a parent, and 2 are
+ * global reference data. Hand-typing 42 policies invites the one omission that
+ * becomes a data breach.
+ *
+ * Run: npm run db:generate-rls
+ * Output: drizzle/0007_rls.sql (also printed to stdout for review)
+ */
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+/** Tables with their own `tenant_id` column. */
+const DIRECT = [
+  "tenant_settings",
+  "users",
+  "sessions",
+  "subscriptions",
+  "subscription_invoices",
+  "clients",
+  "client_groups",
+  "client_notes",
+  "categories",
+  "taxes",
+  "products",
+  "stock_levels",
+  "stock_movements",
+  "number_sequences",
+  "invoices",
+  "payments",
+  "payment_gateways",
+  "gateway_checkouts",
+  "payment_methods",
+  "notifications",
+  "api_keys",
+  "files",
+  "audit_logs",
+  "outbox_events",
+  "idempotency_keys",
+  "departments",
+  "employees",
+  "employee_contracts",
+  "leave_requests",
+  "attendance_records",
+  "support_tickets",
+  "archive_documents",
+  "uploads",
+] as const;
+
+/**
+ * Child tables without `tenant_id`. The policy joins to the parent, so the
+ * tenant boundary is inherited. Verified empirically that leaving these
+ * unprotected lets one tenant read another's rows and attach rows to another
+ * tenant's parent.
+ */
+const VIA_PARENT: Array<{ table: string; parent: string; fk: string }> = [
+  { table: "client_group_members", parent: "client_groups", fk: "group_id" },
+  { table: "invoice_items", parent: "invoices", fk: "invoice_id" },
+  { table: "invoice_status_history", parent: "invoices", fk: "invoice_id" },
+  { table: "invoice_public_tokens", parent: "invoices", fk: "invoice_id" },
+  { table: "payment_allocations", parent: "payments", fk: "payment_id" },
+  { table: "payment_refunds", parent: "payments", fk: "payment_id" },
+  { table: "payment_gateway_secrets", parent: "payment_gateways", fk: "gateway_id" },
+  { table: "support_messages", parent: "support_tickets", fk: "ticket_id" },
+  { table: "password_reset_tokens", parent: "users", fk: "user_id" },
+];
+
+/** Global reference data: readable by every authenticated tenant, never tenant-scoped. */
+const GLOBAL = ["plans"] as const;
+
+const APP_ROLE = "erp_app";
+const SETTING = "current_setting('app.tenant_id', true)";
+
+function directPolicy(table: string): string {
+  const policy = `${table}_tenant_isolation`;
+  return `
+-- ${table}
+ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "${policy}" ON "${table}";
+CREATE POLICY "${policy}" ON "${table}"
+  USING ("tenant_id" = ${SETTING})
+  WITH CHECK ("tenant_id" = ${SETTING});`;
+}
+
+function parentPolicy(table: string, parent: string, fk: string): string {
+  const policy = `${table}_tenant_isolation`;
+  return `
+-- ${table} (tenant inherited from ${parent}.${fk})
+ALTER TABLE "${table}" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "${policy}" ON "${table}";
+CREATE POLICY "${policy}" ON "${table}"
+  USING (EXISTS (
+    SELECT 1 FROM "${parent}" p
+     WHERE p."id" = "${table}"."${fk}"
+       AND p."tenant_id" = ${SETTING}
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM "${parent}" p
+     WHERE p."id" = "${table}"."${fk}"
+       AND p."tenant_id" = ${SETTING}
+  ));`;
+}
+
+const tables = [...DIRECT, "tenants", ...VIA_PARENT.map((entry) => entry.table), ...GLOBAL];
+
+
+const lines: string[] = [];
+lines.push(`-- Row-Level Security for tenant isolation.
+--
+-- GENERATED FILE - do not edit by hand.
+-- Regenerate with: npm run db:generate-rls
+--
+-- Model: one shared schema, \`tenant_id\` on every business table, enforced by
+-- the database rather than by every developer remembering a predicate.
+--
+-- Contract:
+--   * the application connects as the non-owner role "${APP_ROLE}";
+--   * each transaction sets \`app.tenant_id\` with SET LOCAL before any query;
+--   * if the setting is absent, \`current_setting(..., true)\` is NULL and every
+--     policy evaluates to NULL -> no rows. The system fails CLOSED.
+--
+-- FORCE is used so the policies also apply to the table owner, not only to
+-- other roles. Migrations and seeds therefore run as a superuser (or a role
+-- with BYPASSRLS), which is a deliberate, documented privilege boundary.
+--
+-- Rollback: see docs/MIGRATION-ROLLBACK.md.
+--   ALTER TABLE "<table>" DISABLE ROW LEVEL SECURITY;  (per table)
+--   DROP OWNED BY ${APP_ROLE};
+
+/* ------------------------------------------------------------------ */
+/* Application role                                                    */
+/* ------------------------------------------------------------------ */
+-- NOLOGIN: it is assumed via SET ROLE in development/tests and used
+-- directly as the login role in production (see docs/RLS.md). It owns no
+-- table, so it is subject to FORCE policies.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN
+    CREATE ROLE ${APP_ROLE} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+  END IF;
+END
+$$;`);
+
+for (const table of DIRECT) lines.push(directPolicy(table));
+
+lines.push(`
+-- tenants: the row IS the tenant. Only the current tenant's own record is visible.
+ALTER TABLE "tenants" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "tenants" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tenants_tenant_isolation" ON "tenants";
+CREATE POLICY "tenants_tenant_isolation" ON "tenants"
+  USING ("id" = ${SETTING})
+  WITH CHECK ("id" = ${SETTING});`);
+
+for (const entry of VIA_PARENT) lines.push(parentPolicy(entry.table, entry.parent, entry.fk));
+
+lines.push(`
+/* ------------------------------------------------------------------ */
+/* Global reference data                                               */
+/* ------------------------------------------------------------------ */
+-- plans is a platform-wide catalogue: every tenant must read all of it, so it
+-- is deliberately NOT tenant-scoped and carries no RLS. Writes are restricted
+-- to the platform admin surface by the application.
+-- ${GLOBAL.join(", ")}`);
+
+lines.push(`
+/* ------------------------------------------------------------------ */
+/* Privileges                                                          */
+/* ------------------------------------------------------------------ */
+-- DML only; no DDL, no ownership. Tables must remain owned by a different
+-- role so that FORCE policies apply and a compromised app cannot alter them.
+GRANT USAGE ON SCHEMA public TO ${APP_ROLE};
+${tables.map((table) => `GRANT SELECT, INSERT, UPDATE, DELETE ON "${table}" TO ${APP_ROLE};`).join("\n")}
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};
+
+/* ------------------------------------------------------------------ */
+/* Public share-token resolution                                       */
+/* ------------------------------------------------------------------ */
+-- The one read that legitimately happens with NO tenant known: the token is
+-- the credential. A SECURITY DEFINER function performs it with the owner's
+-- privileges (bypassing RLS inside the function body) but returns ONLY the two
+-- identifiers, never row data. The caller then sets app.tenant_id from the
+-- result and every subsequent query runs under RLS.
+CREATE OR REPLACE FUNCTION public.resolve_public_token(p_token_hash text)
+RETURNS TABLE (invoice_id text, tenant_id text)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT i."id", i."tenant_id"
+    FROM "invoice_public_tokens" t
+    JOIN "invoices" i ON i."id" = t."invoice_id"
+   WHERE t."token_hash" = p_token_hash
+     AND t."revoked_at" IS NULL
+     AND t."expires_at" > now()
+     AND i."deleted_at" IS NULL
+     AND i."status" <> 'draft'
+   LIMIT 1
+$$;
+
+-- Owned by the migration role, so it runs with RLS bypassed. EXECUTE is
+-- granted to the app role only.
+REVOKE ALL ON FUNCTION public.resolve_public_token(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.resolve_public_token(text) TO ${APP_ROLE};
+`);
+
+const sql = `${lines.join("\n")}\n`;
+const out = join(process.cwd(), "drizzle", "0007_rls.sql");
+writeFileSync(out, sql, "utf8");
+console.log(`wrote ${out}`);
+console.log(`tables covered: ${DIRECT.length} direct, ${VIA_PARENT.length} via parent, 1 self (tenants), ${GLOBAL.length} global (excluded)`);
+console.log(`policy count: ${DIRECT.length + VIA_PARENT.length + 1}`);

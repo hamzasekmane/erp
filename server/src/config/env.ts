@@ -27,6 +27,21 @@ const schema = z.object({
   ENABLE_API_DOCS: bool,
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(300),
   RATE_LIMIT_DISABLED: bool,
+  /**
+   * Row-Level Security. When true (the default) every tenant-scoped query runs
+   * with `app.tenant_id` set and the database enforces isolation. Disabling it
+   * is a break-glass option for a single release while a migration is rolled
+   * out; it is refused in production unless explicitly allowed.
+   */
+  RLS_ENABLED: z
+    .enum(["true", "false", "1", "0"])
+    .optional()
+    .default("true")
+    .transform((value) => value === "true" || value === "1"),
+  /** Role assumed for tenant traffic when RLS is enabled. */
+  RLS_APP_ROLE: z.string().min(1).default("erp_app"),
+  /** Connection string for the migration/seed role (owner or superuser). */
+  MIGRATION_DATABASE_URL: z.string().optional().default(""),
   RUN_MIGRATIONS_ON_BOOT: z
     .enum(["true", "false", "1", "0"])
     .optional()

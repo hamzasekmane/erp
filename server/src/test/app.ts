@@ -6,6 +6,7 @@ import { migrate } from "../db/migrate";
 import { ensureBaselinePlans } from "../db/bootstrap";
 import { requestIdMiddleware } from "../shared/http";
 import { ApiExceptionFilter } from "../shared/exception.filter";
+import { TenantScopeInterceptor } from "../shared/security/tenant-scope.interceptor";
 
 export async function createTestApp(): Promise<INestApplication> {
   await initDb();
@@ -16,6 +17,7 @@ export async function createTestApp(): Promise<INestApplication> {
   app.setGlobalPrefix("api");
   app.use(requestIdMiddleware);
   app.useGlobalFilters(new ApiExceptionFilter());
+  app.useGlobalInterceptors(new TenantScopeInterceptor());
   await app.init();
   return app;
 }

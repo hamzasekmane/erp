@@ -10,6 +10,7 @@ import { ensureBaselinePlans } from "./db/bootstrap";
 import { closeDb, initDb } from "./db/client";
 import { migrate } from "./db/migrate";
 import { ApiExceptionFilter } from "./shared/exception.filter";
+import { TenantScopeInterceptor } from "./shared/security/tenant-scope.interceptor";
 import { requestIdMiddleware } from "./shared/http";
 import { rateLimitMiddleware } from "./shared/security/rate-limit.middleware";
 
@@ -51,6 +52,8 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
   app.useGlobalFilters(new ApiExceptionFilter());
+  // Wraps each authenticated request in its tenant's RLS scope.
+  app.useGlobalInterceptors(new TenantScopeInterceptor());
 
   await app.listen(env.PORT, "0.0.0.0");
   Logger.log(

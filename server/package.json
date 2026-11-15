@@ -12,7 +12,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "openapi": "tsx src/openapi/generate.ts",
     "test": "vitest run",
-    "db:inspect-discounts": "tsx src/db/scripts/inspect-discounts.ts"
+    "db:inspect-discounts": "tsx src/db/scripts/inspect-discounts.ts",
+    "db:generate-rls": "tsx src/db/scripts/generate-rls.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
