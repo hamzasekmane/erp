@@ -63,7 +63,10 @@ interface Contract {
 }
 
 export default function ContractsPage() {
-  const [loading, setLoading] = useState(false);
+    // Starts true: the effect below loads on mount, so the first paint is already
+  // "loading". Setting it inside the effect was a synchronous setState there,
+  // which schedules a second render before the first has committed.
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -94,7 +97,6 @@ export default function ContractsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     (async () => {
       const [contractsResult, employeesResult] = await Promise.all([listContractsAction(), listEmployeesAction({ limit: 500 })]);
       if (cancelled) return;
@@ -132,9 +134,8 @@ export default function ContractsPage() {
     };
   }, []);
 
-  useEffect(() => {
-    filterContracts();
-  }, [searchTerm, typeFilter, statusFilter, departmentFilter, contracts]);
+  // Filtering is derived from state below; the effect that used to call
+  // filterContracts() discarded the result and only forced a re-render.
 
   const filterContracts = () => {
     let filtered = [...contracts];

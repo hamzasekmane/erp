@@ -581,7 +581,7 @@ export default function CustomReportPage() {
                     {reportData.map((row, idx) => (
                       <tr key={idx} className="hover:bg-[var(--background)]/50 transition-colors">
                         {selectedColumns.map((col) => {
-                          let value = row[col.field as keyof typeof row];
+                          const value = row[col.field as keyof typeof row];
                           if (col.field === "status") {
                             return (
                               <td key={col.id} className="p-3">

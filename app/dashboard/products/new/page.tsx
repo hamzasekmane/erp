@@ -137,14 +137,16 @@ export default async function NewProductPage() {
       if (IS_DEV) console.error("❌ Taxes error:", error);
     }
 
-    if (subscriptionError) {
-      if (IS_DEV) console.log("⚠️ Subscription expired detected");
-      return <SubscriptionExpired error={subscriptionError} />;
-    }
-
   } catch (error: any) {
     if (IS_DEV) console.error("❌ Error fetching initial data:", error);
     fetchError = error?.message || "Unknown error occurred";
+  }
+
+  // Presentation decisions are made after the try: JSX built inside it would not
+  // be covered by the catch, since React renders the element later.
+  if (subscriptionError) {
+    if (IS_DEV) console.log("⚠️ Subscription expired detected");
+    return <SubscriptionExpired error={subscriptionError} />;
   }
 
   if (fetchError && !subscriptionError) {

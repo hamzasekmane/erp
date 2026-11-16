@@ -93,7 +93,6 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     (async () => {
       const result = await listEmployeesAction({
         search: searchTerm || undefined,
@@ -109,9 +108,8 @@ export default function EmployeesPage() {
     };
   }, [searchTerm, statusFilter]);
 
-  useEffect(() => {
-    filterEmployees();
-  }, [searchTerm, statusFilter, departmentFilter, employees]);
+  // Filtering is derived from state below; the effect that used to call
+  // filterEmployees() discarded the result and only forced a re-render.
 
   const filterEmployees = () => {
     let filtered = [...employees];

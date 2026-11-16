@@ -52,27 +52,14 @@ interface Invoice {
   pdfUrl?: string;
 }
 
-export default async function BillingSettingsPage() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("token")?.value || "";
-
-  // Récupérer les informations de facturation
-  let billingData: SubscriptionData | null = null;
-  let billingError = null;
-
-  try {
-    const billingRes = await settingsService.getBilling(token);
-    if (billingRes?.success && billingRes.data) {
-      billingData = billingRes.data;
-    } else {
-      billingError = billingRes?.error || "Impossible de charger les informations de facturation";
-    }
-  } catch (error) {
-    billingError = error instanceof Error ? error.message : "Erreur inconnue";
-  }
-
-  // Données par défaut pour la démo
-  const defaultSubscription: SubscriptionData = {
+/**
+ * The demo subscription used when billing cannot be read.
+ *
+ * A factory rather than a module constant so the dates are relative to the
+ * request, and not captured once at import time. It also keeps `Date` out of the
+ * component body, where React's compiler treats it as an impure render call.
+ */
+  const buildDemoSubscription = (): SubscriptionData => ({
     plan: {
       name: "Professionnel",
       code: "professional",
@@ -113,7 +100,29 @@ export default async function BillingSettingsPage() {
         status: "paid",
       }
     ]
-  };
+  });
+
+export default async function BillingSettingsPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value || "";
+
+  // Récupérer les informations de facturation
+  let billingData: SubscriptionData | null = null;
+  let billingError = null;
+
+  try {
+    const billingRes = await settingsService.getBilling(token);
+    if (billingRes?.success && billingRes.data) {
+      billingData = billingRes.data;
+    } else {
+      billingError = billingRes?.error || "Impossible de charger les informations de facturation";
+    }
+  } catch (error) {
+    billingError = error instanceof Error ? error.message : "Erreur inconnue";
+  }
+
+  // Données par défaut pour la démo
+  const defaultSubscription = buildDemoSubscription();
 
   const subscription = billingData || defaultSubscription;
 

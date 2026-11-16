@@ -196,9 +196,8 @@ export default function HrNotesPage() {
     medical: notes.filter(n => n.type === 'medical').length
   };
 
-  useEffect(() => {
-    filterNotes();
-  }, [searchTerm, typeFilter, priorityFilter, employeeFilter, notes]);
+  // Filtering is derived from state below; the effect that used to call
+  // filterNotes() discarded the result and only forced a re-render.
 
   const filterNotes = () => {
     let filtered = [...notes];

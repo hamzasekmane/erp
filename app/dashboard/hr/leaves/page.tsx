@@ -58,7 +58,10 @@ interface Leave {
 }
 
 export default function LeavesPage() {
-  const [loading, setLoading] = useState(false);
+    // Starts true: the effect below loads on mount, so the first paint is already
+  // "loading". Setting it inside the effect was a synchronous setState there,
+  // which schedules a second render before the first has committed.
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -86,36 +89,52 @@ export default function LeavesPage() {
     sickDays: leaves.filter(l => l.type === 'sick').reduce((sum, l) => sum + l.duration, 0)
   };
 
+  /** Pure fetch — no setState, so the effect below can await it safely. */
+  const fetchLeaves = async () => {
+    const result = await listLeavesAction();
+    if (!result.success) {
+      toast.error(result.message || "Impossible de charger les congés");
+      return null;
+    }
+    return result.leaves.map((leave) => ({
+      id: leave.id,
+      employeeId: leave.employeeId,
+      employeeName: leave.employeeName || "—",
+      department: "—",
+      type: (leave.type as Leave["type"]) ?? "annual",
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      duration: leave.days,
+      status: leave.status,
+      reason: leave.reason ?? "",
+      createdAt: leave.startDate,
+    }));
+  };
+
+  /** Manual reload (after a mutation). */
   const loadLeaves = async () => {
     setLoading(true);
-    const result = await listLeavesAction();
-    if (result.success) {
-      setLeaves(result.leaves.map((leave) => ({
-        id: leave.id,
-        employeeId: leave.employeeId,
-        employeeName: leave.employeeName || "—",
-        department: "—",
-        type: (leave.type as Leave["type"]) ?? "annual",
-        startDate: leave.startDate,
-        endDate: leave.endDate,
-        duration: leave.days,
-        status: leave.status,
-        reason: leave.reason ?? "",
-        createdAt: leave.startDate,
-      })));
-    } else {
-      toast.error(result.message || "Impossible de charger les congés");
-    }
+    const rows = await fetchLeaves();
+    if (rows) setLeaves(rows);
     setLoading(false);
   };
 
   useEffect(() => {
-    void loadLeaves();
+    let cancelled = false;
+    (async () => {
+      const rows = await fetchLeaves();
+      if (cancelled) return;
+      if (rows) setLeaves(rows);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    filterLeaves();
-  }, [searchTerm, statusFilter, typeFilter, departmentFilter, leaves]);
+
+  // Filtering is derived from state below; the effect that used to call
+  // filterLeaves() discarded the result and only forced a re-render.
 
   const filterLeaves = () => {
     let filtered = [...leaves];

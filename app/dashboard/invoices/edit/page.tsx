@@ -100,7 +100,7 @@ export default async function EditInvoicePage({ params }: PageProps) {
           </div>
           
           <p className="mt-8 text-center text-[9px] font-black uppercase text-[var(--foreground-muted)]/60 tracking-[0.3em]">
-            Identifiant Unique : {invoice._id} // Système Gemini v3.0
+            Identifiant Unique : {invoice._id} · Système Gemini v3.0
           </p>
         </div>
 

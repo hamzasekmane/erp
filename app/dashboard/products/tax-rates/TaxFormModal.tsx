@@ -20,11 +20,13 @@ export default function TaxFormModal({
   const [isOpen, setIsOpen] = React.useState(isEditing);
 
   // 1. Logic: Bind the update action with the ID if editing
-  const actionWithId = useMemo(() => 
-    isEditing && initialData?._id 
-      ? updateTaxAction.bind(null, initialData._id) 
+  // Depends on `initialData` itself (what the compiler infers), so the bound
+  // action can never go stale relative to the record being edited.
+  const actionWithId = useMemo(() =>
+    isEditing && initialData?._id
+      ? updateTaxAction.bind(null, initialData._id)
       : createTaxAction,
-    [isEditing, initialData?._id]
+    [isEditing, initialData]
   );
 
   const [state, formAction, isPending] = useActionState(actionWithId, null);

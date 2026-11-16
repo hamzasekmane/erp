@@ -107,10 +107,6 @@ export default function BackupPage() {
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
-  useEffect(() => {
-    fetchBackups();
-  }, []);
-
   const fetchBackups = async () => {
     setLoading(true);
     try {
@@ -120,6 +116,14 @@ export default function BackupPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Sets loading only after the await inside fetchBackups resolves.
+    void (async () => {
+      await fetchBackups();
+    })();
+  }, []);
+
 
   const createBackup = async (type: "database" | "files" | "full") => {
     setCreating(true);
