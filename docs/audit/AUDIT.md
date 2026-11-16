@@ -868,6 +868,64 @@ and the children are orphaned instead.
   switching to `erp_app` explicitly, and the two new tests were verified to FAIL
   when a policy is dropped — a test that passes either way is worse than none.
 
+### 17.0j Production-readiness pass (DONE, with named gaps)
+
+A review aimed at one question: could this be handed to real customers? Six
+defects were found and fixed. Each was verified by reproducing it first.
+
+**1. Sessions lasted one hour, not one week (H6/N-1 — now closed).** The API
+issues a 3600-second access token; the web layer put it in a 7-day cookie,
+discarded the refresh token, and never renewed. The app looked signed in while
+every request 401'd after the first hour. Fixed by using the refresh endpoint the
+API already had. The subtle part worth recording: refresh tokens ROTATE, so the
+new one must be stored on every renewal — replaying a stale one is treated as
+reuse and revokes the whole token family, which would have presented as "randomly
+logged out".
+
+**2. Logout did not end the session.** It deleted cookies only. The session row
+stayed valid for up to 30 days, so a copied refresh token survived "log out". It
+is now revoked at the API first.
+
+**3. A publicly known JWT secret could have been deployed.** `.env.production.example`
+ships `replace-with-48-random-bytes`, and the only check was "does not start with
+dev-only". Verified by starting the config layer in production with that value: it
+started. That key lets anyone forge a token for any tenant. Placeholders and
+low-diversity secrets are now refused.
+
+**4. `docker compose up` could not start the API on the default path.** The API
+refuses to boot in production without explicit CORS origins, and compose passed
+none — it worked only if the operator had separately set it. Compose now supplies
+a default. (Docker is still unavailable in this sandbox: the container stack
+remains unverified by execution.)
+
+**5. Persian-Gulf-scale trap: a `C` collation breaks Arabic search silently.**
+`show_trgm('دراجة')` returns empty and `similarity()` returns 0 — even for
+identical strings — because pg_trgm classifies word characters via ctype. The
+migration succeeds and queries run; search just never matches. Measured: 0 on a
+`C` database, 0.5294118 on `C.UTF-8`, same build. A boot guard now says so
+explicitly instead of leaving it to be discovered.
+
+**6. No root error boundary.** `app/dashboard` had one; a throw anywhere else
+(login, public pages, checkout) unmounted the tree to a blank page. Added root
+error, global-error, not-found and loading files, plus the security headers the
+pages never sent (CSP, HSTS, X-Frame-Options, Referrer-Policy,
+Permissions-Policy). The CSP still needs `'unsafe-inline'` for Next's inline
+bootstrap; a nonce-based policy remains the target and is not claimed as done.
+
+**Still not production-ready, stated plainly:**
+
+* **Login cannot work under real RLS** (§17.0i). It resolves a user by email
+  before a tenant is known, which the policies forbid. This is the largest gap
+  and it needs an architecture decision, not a patch.
+* **Docker has never been executed.** Compose and both Dockerfiles are validated
+  by inspection and YAML parsing only.
+* **The i18n/RTL story is unchanged (H4/I18N-1..5).** The app is Arabic-first in
+  its copy but hardcodes `dir="ltr"` in the root layout and has no locale
+  routing, so a genuinely Arabic UI is not delivered yet.
+* **474 ESLint errors remain**, as a tracked, non-blocking backlog.
+* **`xlsx` advisory remains** (no patched release exists); the remedy is to move
+  export server-side.
+
 ### 17.1 Agreed sequencing for the next sprints
 
 Fixed with the product owner on 2026-11-15:
