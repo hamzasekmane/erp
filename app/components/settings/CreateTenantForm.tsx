@@ -61,7 +61,7 @@ interface FormData {
 export function CreateTenantForm({ token }: CreateTenantFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<FormData>(() => ({
     name: "",
     subdomain: "",
     email: "",
@@ -82,7 +82,7 @@ export function CreateTenantForm({ token }: CreateTenantFormProps) {
       timezone: "Europe/Paris",
       currency: "EUR"
     }
-  });
+  }));
 
   const plans = [
     { value: "starter", label: "Starter", price: "29€/mois", users: 5, storage: 1 },
@@ -177,7 +177,7 @@ export function CreateTenantForm({ token }: CreateTenantFormProps) {
                 Informations générales
               </h2>
               <p className="text-[9px] text-[var(--foreground-muted)] font-mono">
-                Identité et coordonnées de l'organisation
+                Identité et coordonnées de l&apos;organisation
               </p>
             </div>
           </div>
@@ -187,7 +187,7 @@ export function CreateTenantForm({ token }: CreateTenantFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider flex items-center gap-2">
-                <Building2 size={12} /> Nom de l'organisation *
+                <Building2 size={12} /> Nom de l&apos;organisation *
               </label>
               <input
                 type="text"
@@ -315,7 +315,7 @@ export function CreateTenantForm({ token }: CreateTenantFormProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider flex items-center gap-2">
-                <Briefcase size={12} /> Plan d'abonnement *
+                <Briefcase size={12} /> Plan d&apos;abonnement *
               </label>
               <select
                 name="plan"
@@ -349,7 +349,7 @@ export function CreateTenantForm({ token }: CreateTenantFormProps) {
 
             <div className="space-y-2">
               <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider flex items-center gap-2">
-                <Users size={12} /> Nombre max d'utilisateurs
+                <Users size={12} /> Nombre max d&apos;utilisateurs
               </label>
               <input
                 type="number"

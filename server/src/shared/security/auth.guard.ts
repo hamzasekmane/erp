@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { and, eq, isNull } from "drizzle-orm";
-import { getDb } from "../../db/client";
+import { getDb, runTenant } from "../../db/client";
 import { users } from "../../db/schema";
 import { AppError } from "../errors";
 import { IS_PUBLIC_KEY, PERMISSIONS_KEY, type AuthContext } from "./decorators";
@@ -33,12 +33,19 @@ export class AuthGuard implements CanActivate {
       throw AppError.unauthorized("Session expirée, veuillez vous reconnecter");
     }
 
-    const db = getDb();
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(and(eq(users.id, claims.sub), isNull(users.deletedAt)))
-      .limit(1);
+    // The token carries the tenant, so the user can be read inside its scope.
+    // This guard runs BEFORE the TenantScopeInterceptor (guards precede
+    // interceptors in Nest), so without this the SELECT would be unscoped: it
+    // returns zero rows against a non-superuser connection and every
+    // authenticated request answered 401 "Utilisateur introuvable". That went
+    // unnoticed because the test connection is a superuser, which bypasses RLS.
+    const [user] = await runTenant(claims.tid, async () =>
+      getDb()
+        .select()
+        .from(users)
+        .where(and(eq(users.id, claims.sub), isNull(users.deletedAt)))
+        .limit(1),
+    );
 
     if (!user) throw AppError.unauthorized("Utilisateur introuvable");
     if (user.status !== "active") throw AppError.forbidden("Compte désactivé", "ACCOUNT_DISABLED");

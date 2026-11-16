@@ -7,7 +7,8 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { env, isProd } from "./config/env";
 import { ensureBaselinePlans } from "./db/bootstrap";
-import { assertRlsEffective, closeDb, initDb } from "./db/client";
+import { assertArabicSearchWorks } from "./db/guards";
+import { assertPreTenantFunctionsUsable, assertRlsEffective, closeDb, initDb } from "./db/client";
 import { migrate } from "./db/migrate";
 import { ApiExceptionFilter } from "./shared/exception.filter";
 import { TenantScopeInterceptor } from "./shared/security/tenant-scope.interceptor";
@@ -66,6 +67,48 @@ async function bootstrap() {
     );
   } else {
     Logger.log(`[security] ${rls.reason}`, "Bootstrap");
+  }
+
+  // The pre-tenant lookups (login, refresh, password reset, public invoice
+  // token) are SECURITY DEFINER functions. They only see rows past FORCE RLS if
+  // the role that OWNS them bypasses RLS — otherwise every login fails with 401
+  // and nothing else looks wrong. The migration role is therefore required to be
+  // a superuser or BYPASSRLS; asserted here because the mistake is silent.
+  {
+    const preTenant = await assertPreTenantFunctionsUsable().catch((error: unknown) => ({
+      usable: false,
+      reason: `check failed: ${error instanceof Error ? error.message : String(error)}`,
+    }));
+    if (!preTenant.usable) {
+      Logger.warn(`[security] Pre-tenant auth lookups may fail: ${preTenant.reason}`, "Bootstrap");
+    }
+  }
+
+  // Arabic search correctness, checked at boot rather than discovered by users.
+  //
+  // pg_trgm builds trigrams from WORD characters, and it decides what a word
+  // character is via the database's ctype. In a database created with the `C`
+  // collation it falls back to isalnum() on the raw UTF-8 bytes, so every Arabic
+  // letter is classified as a separator: `show_trgm('دراجة')` is EMPTY and
+  // `similarity()` always returns 0. The failure is silent — no error, no empty
+  // index, just search that never matches — which is why it is asserted here.
+  //
+  // Reproduced on PostgreSQL 16.2: the same build and the same extension give
+  // 0.529 for ('دراجة هوائية', 'دراجه هوائيه') on a C.UTF-8 database and 0 on a
+  // C one.
+  const arabicSearch = await assertArabicSearchWorks().catch((error: unknown) => ({
+    ok: false,
+    reason: `check failed: ${error instanceof Error ? error.message : String(error)}`,
+  }));
+  if (!arabicSearch.ok) {
+    Logger.warn(
+      `[search] Arabic search will return no results: ${arabicSearch.reason}. ` +
+        "Create the database with LC_COLLATE/LC_CTYPE = C.UTF-8 (or a UTF-8 locale) " +
+        "and re-run migrations.",
+      "Bootstrap",
+    );
+  } else {
+    Logger.log(`[search] ${arabicSearch.reason}`, "Bootstrap");
   }
 
   await app.listen(env.PORT, "0.0.0.0");

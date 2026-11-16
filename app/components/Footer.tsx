@@ -34,7 +34,7 @@ export default function Footer() {
                   className="bg-transparent border-none focus:ring-0 text-sm px-4 flex-grow text-white"
                 />
                 <button className="bg-white text-black text-xs font-black px-6 py-3 rounded-xl hover:bg-blue-500 hover:text-white transition-all">
-                  S'ABONNER
+                  S&apos;ABONNER
                 </button>
               </div>
             </div>

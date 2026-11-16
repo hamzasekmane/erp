@@ -239,7 +239,7 @@ export default function ProductsReportPage() {
               </div>
               <span className="text-[8px] font-mono text-[var(--foreground-muted)]">KPI_02</span>
             </div>
-            <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Chiffre d'affaires</p>
+            <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Chiffre d&apos;affaires</p>
             <p className="text-2xl font-black text-emerald-500">{productsData.turnover.toLocaleString()}€</p>
             <div className="flex items-center gap-1">
               <TrendingUp size={12} className="text-emerald-500" />

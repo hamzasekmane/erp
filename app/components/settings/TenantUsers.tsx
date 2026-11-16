@@ -48,10 +48,6 @@ export function TenantUsers({ tenantId, token }: TenantUsersProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showInviteModal, setShowInviteModal] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [tenantId]);
-
   const fetchUsers = async () => {
     setIsLoading(true);
     setEndpointError(false);
@@ -71,6 +67,15 @@ export function TenantUsers({ tenantId, token }: TenantUsersProps) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    // The fetch's first setState happens after an await, so this does not
+    // cascade a render; the extra tick keeps mount work off the render path.
+    void (async () => {
+      await fetchUsers();
+    })();
+  }, [tenantId]);
+
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -138,7 +143,7 @@ export function TenantUsers({ tenantId, token }: TenantUsersProps) {
             Module utilisateur en cours de développement
           </p>
           <p className="text-xs text-[var(--foreground-muted)]/60 mt-1">
-            L'API de gestion des utilisateurs sera bientôt disponible
+            L&apos;API de gestion des utilisateurs sera bientôt disponible
           </p>
           <button
             onClick={fetchUsers}
@@ -360,7 +365,7 @@ export function TenantUsers({ tenantId, token }: TenantUsersProps) {
             </div>
             <div className="p-5">
               <p className="text-sm text-[var(--foreground-muted)] text-center">
-                L'invitation d'utilisateurs sera disponible prochainement.
+                L&apos;invitation d&apos;utilisateurs sera disponible prochainement.
               </p>
               <button
                 onClick={() => setShowInviteModal(false)}

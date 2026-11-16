@@ -246,7 +246,7 @@ export default async function SettingsPage() {
                 <span className="text-xs font-medium text-emerald-500">Actif</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-[var(--foreground-muted)]">Files d'attente</span>
+                <span className="text-xs text-[var(--foreground-muted)]">Files d&apos;attente</span>
                 <span className="text-xs font-medium text-amber-500">2 traitements</span>
               </div>
             </div>

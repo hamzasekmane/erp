@@ -57,7 +57,7 @@ export default async function ClientImportPage() {
           <span className="text-emerald-400 ml-2">•</span>
         </h1>
         <p className="text-zinc-400 text-sm mt-2">
-          Importez vos clients en masse à partir d'un fichier Excel ou CSV
+          Importez vos clients en masse à partir d&apos;un fichier Excel ou CSV
         </p>
       </div>
 

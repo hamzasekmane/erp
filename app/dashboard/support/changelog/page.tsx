@@ -120,7 +120,7 @@ export default function ChangelogPage() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white rounded-xl text-sm font-medium hover:bg-[var(--accent)]/90 transition-colors"
           >
             <Bell size={16} />
-            S'abonner aux mises à jour
+            S&apos;abonner aux mises à jour
           </Link>
         </div>
 

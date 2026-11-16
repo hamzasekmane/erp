@@ -38,7 +38,7 @@ export default async function ViewProductPage({ params }: PageProps) {
             href="/dashboard/products" 
             className="flex items-center gap-2 text-[var(--foreground-muted)] hover:text-[var(--accent)] transition-colors font-bold uppercase text-[10px] tracking-wider"
           >
-            <ArrowLeft size={14} /> Retour à l'inventaire
+            <ArrowLeft size={14} /> Retour à l&apos;inventaire
           </Link>
           
           <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default async function ViewProductPage({ params }: PageProps) {
                   <span className="font-black text-[10px] uppercase italic text-[var(--foreground)]">{product.unit}</span>
                 </li>
                 <li className="flex justify-between items-center">
-                  <span className="text-[9px] font-bold text-[var(--foreground-muted)] uppercase">Date d'ajout</span>
+                  <span className="text-[9px] font-bold text-[var(--foreground-muted)] uppercase">Date d&apos;ajout</span>
                   <div className="flex items-center gap-1.5 text-[9px] font-mono text-[var(--foreground-muted)]">
                     <Calendar size={10} />
                     {new Date(product.createdAt).toLocaleDateString()}

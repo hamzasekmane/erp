@@ -120,14 +120,26 @@ The application must connect as a **non-owner, non-superuser** role. Use two
 credentials:
 
 ```sql
--- owner / migration role (has DDL)
-CREATE ROLE erp_owner LOGIN PASSWORD '...';
+-- owner / migration role: has DDL, and MUST bypass RLS.
+--
+-- The pre-tenant lookups (login by email, refresh by token hash, public invoice
+-- token) are SECURITY DEFINER functions owned by this role. A definer function
+-- only sees past FORCE RLS if its owner is exempt — and an ordinary role,
+-- including the database owner, is NOT exempt. Without BYPASSRLS every login
+-- returns 401 while everything else looks correctly configured. The API checks
+-- this at boot and logs the exact ALTER ROLE needed.
+CREATE ROLE erp_owner LOGIN PASSWORD '...' BYPASSRLS;
 GRANT ALL ON DATABASE erp TO erp_owner;
 
 -- application role (DML only, subject to RLS)
--- created by migration 0007 as NOLOGIN; give it a password for direct login
-ALTER ROLE erp_app LOGIN PASSWORD '...';
+-- created by migration 0007 as NOLOGIN; give it a password for direct login.
+-- docker/db-init/00-app-role.sh does this automatically for docker compose.
+ALTER ROLE erp_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '...';
 ```
+
+No tenant is set when a helper runs, so a helper that were ever replaced by a
+plain read would return nothing rather than every tenant — the failure stays
+closed.
 
 ```dotenv
 # used by the API at runtime
@@ -139,6 +151,16 @@ MIGRATION_DATABASE_URL=postgres://erp_owner:...@db:5432/erp
 `RLS_APP_ROLE=erp_app` is the role assumed with `SET LOCAL ROLE`. Because the
 table owner is subject to `FORCE` policies, this remains correct even if `erp_app`
 is later granted ownership of a table.
+
+### Cross-tenant work
+
+Three things legitimately span tenants and cannot be expressed as a tenant
+predicate: the outbox worker, the housekeeping batch, and the platform-admin
+console. They run through `runPrivileged()` on the `MIGRATION_DATABASE_URL`
+connection. `getDb()` resolves scopes in a fixed order — tenant scope first, then
+privileged, then the application role — so a tenant request can never
+accidentally escalate; the privileged handle is unreachable from inside
+`runTenant()`.
 
 ## 8. Verifying an installation
 
@@ -160,10 +182,15 @@ rollback;
 
 ## 9. Known limitations
 
-1. **Tests run as superuser.** They use `SET LOCAL ROLE erp_app` to *become*
+1. **The suites run as superuser.** They use `SET LOCAL ROLE erp_app` to *become*
    subject to RLS, which is verified by asserting that an unscoped superuser read
-   returns more rows than a scoped one. A production-like CI job running the
-   suite as a genuine non-superuser login would be stronger.
+   returns more rows than a scoped one. Because a superuser bypasses RLS even
+   under FORCE, this hides a whole class of bug: unscoped reads simply work, so
+   login, the auth guard, the outbox worker and the admin console were all broken
+   in a correctly configured deployment while the suite was green. The coverage
+   now comes from two places instead — `scripts/production-smoke.sh` (a CI job
+   that runs the API as a genuine `erp_app` login against an `erp_owner`-migrated
+   database) and `src/test/auth-rls.e2e.test.ts`.
 2. **`plans` is unprotected.** Intentional, but it means a compromised app
    credential can read the plan catalogue. It contains no tenant data.
 3. **RLS is not a substitute for application authorisation.** It scopes *which

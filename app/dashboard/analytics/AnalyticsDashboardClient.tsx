@@ -129,29 +129,37 @@ export default function AnalyticsDashboardClient({
     }
   };
 
-  const fetchData = async () => {
+  /** Pure fetch: returns the settled results, never touches state. */
+  const fetchData = async (range: string) => {
+    const params = getPeriodParams(range);
+    const dateParams = params.startDate ? { startDate: params.startDate, endDate: params.endDate } : {};
+
+    return Promise.allSettled([
+      analyticsService.getSalesReport(token, params),
+      analyticsService.getPaymentReport(token, params),
+      analyticsService.getClientReport(token, params),
+      analyticsService.getProductReport(token, params),
+      analyticsService.getAgingReport(token),
+      analyticsService.getTrafficSources(token, dateParams),
+    ]);
+  };
+
+  const applyResults = (results: Awaited<ReturnType<typeof fetchData>>) => {
+    const [sales, payments, clients, products, aging, traffic] = results;
+    setSalesData(sales.status === 'fulfilled' ? sales.value : null);
+    setPaymentData(payments.status === 'fulfilled' ? payments.value : null);
+    setClientData(clients.status === 'fulfilled' ? clients.value : null);
+    setProductData(products.status === 'fulfilled' ? products.value : null);
+    setAgingData(aging.status === 'fulfilled' ? aging.value : null);
+    setTrafficData(traffic.status === 'fulfilled' ? traffic.value : null);
+  };
+
+  /** Manual refresh (button, range chip): sets the spinner, then loads. */
+  const fetchDataForUser = async () => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const params = getPeriodParams(dateRange);
-      const dateParams = params.startDate ? { startDate: params.startDate, endDate: params.endDate } : {};
-
-      const [sales, payments, clients, products, aging, traffic] = await Promise.allSettled([
-        analyticsService.getSalesReport(token, params),
-        analyticsService.getPaymentReport(token, params),
-        analyticsService.getClientReport(token, params),
-        analyticsService.getProductReport(token, params),
-        analyticsService.getAgingReport(token),
-        analyticsService.getTrafficSources(token, dateParams),
-      ]);
-
-      setSalesData(sales.status === 'fulfilled' ? sales.value : null);
-      setPaymentData(payments.status === 'fulfilled' ? payments.value : null);
-      setClientData(clients.status === 'fulfilled' ? clients.value : null);
-      setProductData(products.status === 'fulfilled' ? products.value : null);
-      setAgingData(aging.status === 'fulfilled' ? aging.value : null);
-      setTrafficData(traffic.status === 'fulfilled' ? traffic.value : null);
+      applyResults(await fetchData(dateRange));
     } catch (err) {
       console.error('Error fetching analytics:', err);
       setError('حدث خطأ أثناء جلب البيانات');
@@ -161,10 +169,32 @@ export default function AnalyticsDashboardClient({
   };
 
   useEffect(() => {
-    if (dateRange !== initialDateRange) {
-      fetchData();
-    }
-  }, [dateRange]);
+    // Initial data arrives as a prop; only a range change needs a fetch. Every
+    // setState here happens after an await, so nothing renders cascadingly.
+    if (dateRange === initialDateRange) return;
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const results = await fetchData(dateRange);
+        if (cancelled) return;
+        applyResults(results);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Error fetching analytics:', err);
+        setError('حدث خطأ أثناء جلب البيانات');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // applyResults/fetchData are re-created each render; keying on the range is
+    // the intent — the initial range is handled by props above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, initialDateRange]);
 
   const getAnalyticsCards = (): AnalyticsCard[] => {
     const totalSales = salesData?.totalSales || 0;
@@ -311,7 +341,7 @@ export default function AnalyticsDashboardClient({
     })) || [];
 
   const handleRefresh = () => {
-    fetchData();
+    void fetchDataForUser();
   };
 
   const handleExport = async () => {
@@ -369,7 +399,7 @@ export default function AnalyticsDashboardClient({
           <h2 className="text-xl font-bold mb-2">Erreur de chargement</h2>
           <p className="text-[var(--foreground-muted)] mb-4">{error}</p>
           <button
-            onClick={fetchData}
+            onClick={fetchDataForUser}
             className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
           >
             Réessayer
@@ -702,7 +732,7 @@ export default function AnalyticsDashboardClient({
             </div>
             <h3 className="text-lg font-black mb-2">Prévisions</h3>
             <p className="text-sm text-[var(--foreground-muted)]">
-              Prédictions basées sur l'IA et analyses avancées
+              Prédictions basées sur l&apos;IA et analyses avancées
             </p>
           </Link>
 

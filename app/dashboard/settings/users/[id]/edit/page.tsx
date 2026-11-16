@@ -93,7 +93,7 @@ export default async function EditUserPage({ params }: PageProps) {
                 </span>
               </div>
               <h1 className="text-3xl md:text-4xl font-black text-[var(--foreground)] tracking-tighter">
-                Modifier l'utilisateur
+                Modifier l&apos;utilisateur
               </h1>
               <p className="text-xs text-[var(--foreground-muted)] font-mono">
                 {user.name} • {user.email}
@@ -137,7 +137,7 @@ export default async function EditUserPage({ params }: PageProps) {
                   Informations générales
                 </h2>
                 <p className="text-[9px] text-[var(--foreground-muted)] font-mono">
-                  Modifiez les informations de base de l'utilisateur
+                  Modifiez les informations de base de l&apos;utilisateur
                 </p>
               </div>
             </div>
@@ -218,7 +218,7 @@ export default async function EditUserPage({ params }: PageProps) {
                   Rôle & Permissions
                 </h2>
                 <p className="text-[9px] text-[var(--foreground-muted)] font-mono">
-                  Définissez les permissions et le niveau d'accès
+                  Définissez les permissions et le niveau d&apos;accès
                 </p>
               </div>
             </div>
@@ -337,7 +337,7 @@ export default async function EditUserPage({ params }: PageProps) {
                   Organisation
                 </h2>
                 <p className="text-[9px] text-[var(--foreground-muted)] font-mono">
-                  Associez l'utilisateur à une organisation (tenant)
+                  Associez l&apos;utilisateur à une organisation (tenant)
                 </p>
               </div>
             </div>
@@ -421,7 +421,7 @@ export default async function EditUserPage({ params }: PageProps) {
                 <div>
                   <p className="text-[9px] font-black text-amber-500 uppercase tracking-wider">Information</p>
                   <p className="text-[10px] text-[var(--foreground-muted)]">
-                    L'utilisateur recevra un email de confirmation si le mot de passe est modifié.
+                    L&apos;utilisateur recevra un email de confirmation si le mot de passe est modifié.
                   </p>
                 </div>
               </div>

@@ -333,7 +333,7 @@ export default function ReportsPage() {
 
               <div className="pt-4 p-4 bg-white/5 rounded-xl border border-white/10 backdrop-blur-sm">
                 <p className="text-[10px] leading-relaxed text-slate-300 italic">
-                  "L'analyse actuelle indique أن أداء المبيعات تجاوز التوقعات بنسبة 12%. يُنصح بزيادة المخزون من الفئة Premium لمواجهة طلب الربع القادم."
+                  &quot;L&apos;analyse actuelle indique أن أداء المبيعات تجاوز التوقعات بنسبة 12%. يُنصح بزيادة المخزون من الفئة Premium لمواجهة طلب الربع القادم.&quot;
                 </p>
               </div>
             </div>

@@ -46,7 +46,26 @@ type Holder = {
 type TenantScope = { tx: Database; tenantId: string };
 const tenantScope = new AsyncLocalStorage<TenantScope>();
 
+/**
+ * Same idea for `runAppRole()`: the transaction with the application role
+ * assumed. Kept separate from `tenantScope` because there is deliberately no
+ * tenant here — `currentTenantId()` must keep reporting null so that callers
+ * cannot mistake "acting as erp_app" for "scoped to a tenant".
+ */
+const appRoleScope = new AsyncLocalStorage<{ tx: Database }>();
+
 let holder: Holder | null = null;
+/** Privileged pool for migrations; null when the app connection already has DDL rights. */
+let migrationPool: Pool | null = null;
+/** Drizzle handle bound to `migrationPool`, used by cross-tenant background work. */
+let privilegedDb: Database | null = null;
+
+/**
+ * Binds the privileged handle for the duration of `runPrivileged()`.
+ * Deliberately distinct from the tenant scope: a privileged call has no tenant,
+ * so `currentTenantId()` stays null and nothing can mistake it for tenant work.
+ */
+const privilegedScope = new AsyncLocalStorage<{ tx: Database }>();
 
 /**
  * Dev/test: embedded PostgreSQL (PGlite, WASM) — same SQL dialect, no server needed.
@@ -117,6 +136,23 @@ export async function initDb(): Promise<void> {
   });
   pool.on("error", (error) => console.error("[db] idle client error", error.message));
   const db = drizzleNodePg(pool, { schema });
+
+  // Privileged connection for DDL when the application role is NOT allowed to
+  // own schema objects. Without this the only way to run migrations is to give
+  // the app role superuser rights — which makes RLS inert in production, the one
+  // thing this whole design exists to prevent.
+  migrationPool =
+    env.MIGRATION_DATABASE_URL && env.MIGRATION_DATABASE_URL !== env.DATABASE_URL
+      ? new Pool({
+          connectionString: env.MIGRATION_DATABASE_URL,
+          max: 2,
+          ssl: env.DATABASE_SSL ? { rejectUnauthorized: true } : undefined,
+          statement_timeout: 60_000,
+          connectionTimeoutMillis: 10_000,
+        })
+      : null;
+  migrationPool?.on("error", (error) => console.error("[db] migration client error", error.message));
+  privilegedDb = migrationPool ? (drizzleNodePg(migrationPool, { schema }) as unknown as Database) : null;
   holder = {
     db,
     exec: async (sql: string) => {
@@ -214,9 +250,59 @@ export async function assertRlsEffective(): Promise<{ enforced: boolean; reason:
   return { enforced: true, reason: `role "${role}" is subject to RLS` };
 }
 
+/**
+ * Verifies the property the pre-tenant lookups depend on.
+ *
+ * `resolve_login_scope()` and friends are SECURITY DEFINER: they run with the
+ * privileges of the role that OWNS them (the migration role). That only defeats
+ * FORCE RLS if the owning role is a superuser or has BYPASSRLS — an ordinary
+ * role, even the database owner, is still subject to the policies and sees no
+ * rows. The failure is silent and total: every login returns 401.
+ *
+ * Found the hard way: with `erp_owner` as a plain NOSUPERUSER role, login broke
+ * even though the functions existed, were granted and were owned correctly.
+ */
+export async function assertPreTenantFunctionsUsable(): Promise<{ usable: boolean; reason: string }> {
+  if (!holder) throw new Error("Database not initialised. Call initDb() first.");
+  const rows = extractRows(
+    await holder.db.execute(sql`
+      select p.proname,
+             r.rolname,
+             r.rolsuper,
+             r.rolbypassrls
+        from pg_proc p
+        join pg_roles r on r.oid = p.proowner
+       where p.pronamespace = 'public'::regnamespace
+         and p.proname in ('resolve_login_scope','resolve_user_scope',
+                           'resolve_refresh_scope','resolve_password_reset_scope',
+                           'resolve_public_token')
+    `),
+  );
+  if (rows.length === 0) {
+    return { usable: false, reason: "pre-tenant scope functions are missing; run migrations" };
+  }
+  const unsafe = rows.filter((row) => row.rolsuper !== true && row.rolbypassrls !== true).map((row) => String(row.proname));
+  if (unsafe.length > 0) {
+    const owner = String(rows[0].rolname);
+    return {
+      usable: false,
+      reason:
+        `SECURITY DEFINER helpers are owned by "${owner}", which is subject to RLS ` +
+        `(${unsafe.join(", ")}). Give the migration role BYPASSRLS: ALTER ROLE ${owner} BYPASSRLS`,
+    };
+  }
+  return { usable: true, reason: `owned by "${String(rows[0].rolname)}", which bypasses RLS` };
+}
+
 export function getDb(): Database {
+  // Tenant scope wins over everything: inside a tenant request nothing may
+  // silently escalate to the privileged connection.
   const scope = tenantScope.getStore();
   if (scope) return scope.tx;
+  const privileged = privilegedScope.getStore();
+  if (privileged) return privileged.tx;
+  const appRole = appRoleScope.getStore();
+  if (appRole) return appRole.tx;
   if (!holder) throw new Error("Database not initialised. Call initDb() first.");
   return holder.db;
 }
@@ -241,6 +327,51 @@ export async function runTenant<T>(tenantId: string, fn: () => Promise<T>): Prom
   }
   if (!env.RLS_ENABLED) return fn();
   return holder.runScoped(tenantId, async (tx) => tenantScope.run({ tx, tenantId }, fn));
+}
+
+/**
+ * Runs `fn` in a transaction with the application role assumed but NO tenant set.
+ *
+ * Needed for the handful of pre-tenant operations that call a SECURITY DEFINER
+ * helper: the helper is granted to the application role only, so the connection
+ * has to be acting as that role — but `SET LOCAL` is transaction-scoped, hence
+ * the explicit transaction. Inside, `app.tenant_id` is unset, so any accidental
+ * read of a tenant table still returns nothing (fail closed).
+ */
+export async function runAppRole<T>(fn: () => Promise<T>): Promise<T> {
+  if (!holder) throw new Error("Database not initialised. Call initDb() first.");
+  if (!env.RLS_ENABLED) return fn();
+  return holder.db.transaction(async (tx) => {
+    await tx.execute(sql.raw(`set local role ${quoteIdent(env.RLS_APP_ROLE)}`));
+    // Bind the handle: `getDb()` inside `fn` must return this transaction. The
+    // embedded driver has a single connection, so querying the base handle while
+    // a transaction is open waits forever for itself.
+    return appRoleScope.run({ tx: tx as unknown as Database }, fn);
+  });
+}
+
+/**
+ * Runs `fn` on the PRIVILEGED connection, as the migration/owner role.
+ *
+ * Only for work that is inherently cross-tenant and has no request behind it:
+ * the outbox worker, the housekeeping batch, and the platform-admin surface.
+ * Under RLS every one of those would otherwise see zero rows — the outbox would
+ * silently deliver nothing and maintenance would report zero work done.
+ *
+ * Falls back to the normal handle when no separate migration credential is
+ * configured (embedded database, or a single-role development setup), which is
+ * exactly the previous behaviour.
+ */
+export async function runPrivileged<T>(fn: () => Promise<T>): Promise<T> {
+  if (!holder) throw new Error("Database not initialised. Call initDb() first.");
+  const target = privilegedDb;
+  if (!target) return fn();
+  return privilegedScope.run({ tx: target }, fn);
+}
+
+/** True when this process can bypass RLS (a privileged credential is configured). */
+export function hasPrivilegedConnection(): boolean {
+  return privilegedDb !== null;
 }
 
 /** The tenant bound to the current scope, or null outside one. */
@@ -290,11 +421,31 @@ export async function execSql(sql: string): Promise<void> {
 
 /** Pinned connection used by the migrator (transactions need a single session). */
 export async function getTxClient(): Promise<TxClient> {
+  // Migrations go through MIGRATION_DATABASE_URL when it is set. The functions
+  // and policies they create are then OWNED by that privileged role, which is
+  // what lets a SECURITY DEFINER helper see through FORCE RLS while the
+  // application role still cannot (see drizzle/0019_auth_scope_functions.sql).
   if (!holder) throw new Error("Database not initialised. Call initDb() first.");
-  return holder.connectTx();
+  if (!migrationPool) return holder.connectTx();
+  const client = await migrationPool.connect();
+  return {
+    exec: async (statement: string) => {
+      await client.query(statement);
+    },
+    query: async <T>(statement: string) => {
+      const result = await client.query(statement);
+      return result.rows as T[];
+    },
+    release: async () => {
+      client.release();
+    },
+  };
 }
 
 export async function closeDb(): Promise<void> {
+  await migrationPool?.end().catch(() => undefined);
+  migrationPool = null;
+  privilegedDb = null;
   if (!holder) return;
   await holder.close();
   holder = null;

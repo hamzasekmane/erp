@@ -78,7 +78,7 @@ export default function EmailSettingsPage() {
                 Configuration Email
               </h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Gérez les paramètres d'envoi d'emails
+                Gérez les paramètres d&apos;envoi d&apos;emails
               </p>
             </div>
           </div>
@@ -91,7 +91,7 @@ export default function EmailSettingsPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl font-medium text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <TestTube size={16} />}
-            Tester l'envoi
+            Tester l&apos;envoi
           </button>
           <button
             onClick={handleSave}
@@ -111,7 +111,7 @@ export default function EmailSettingsPage() {
           <div>
             <h4 className="text-sm font-bold text-amber-500">Configuration SMTP requise</h4>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-              Actuellement en mode démo. Aucun email réel ne sera envoyé tant que vous n'avez pas configuré vos paramètres SMTP.
+              Actuellement en mode démo. Aucun email réel ne sera envoyé tant que vous n&apos;avez pas configuré vos paramètres SMTP.
             </p>
           </div>
         </div>
@@ -182,7 +182,7 @@ export default function EmailSettingsPage() {
             
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Nom d'utilisateur / Email</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Nom d&apos;utilisateur / Email</label>
                 <input
                   type="email"
                   value={smtpConfig.user}
@@ -221,7 +221,7 @@ export default function EmailSettingsPage() {
                   placeholder="noreply@votreentreprise.com"
                   className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm"
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">L'adresse qui apparaîtra comme expéditeur des emails</p>
+                <p className="text-[10px] text-zinc-500 mt-1">L&apos;adresse qui apparaîtra comme expéditeur des emails</p>
               </div>
             </div>
           </div>
@@ -286,7 +286,7 @@ export default function EmailSettingsPage() {
       <div className="bg-zinc-100 dark:bg-zinc-800/50 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <Copy size={14} className="text-zinc-500" />
-          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Variables d'environnement</h4>
+          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Variables d&apos;environnement</h4>
         </div>
         <div className="space-y-2">
           <code className="block text-[10px] font-mono text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-950 p-2 rounded-lg">

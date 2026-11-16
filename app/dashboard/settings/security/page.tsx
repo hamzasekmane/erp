@@ -59,13 +59,17 @@ export default function SecuritySettingsPage() {
   const twoFactorEnabled = Boolean(mfaStatus?.enabled);
 
   const refreshMfaStatus = useCallback(async () => {
+    // Awaiting before the first setState keeps the effect body free of
+    // synchronous state updates, which would otherwise cascade a render.
     const result = await getMfaStatusAction();
     if (result.data) setMfaStatus(result.data);
     else if (result.error) setMessage({ type: 'error', text: result.error });
   }, []);
 
   useEffect(() => {
-    void refreshMfaStatus();
+    void (async () => {
+      await refreshMfaStatus();
+    })();
   }, [refreshMfaStatus]);
 
   // Active sessions

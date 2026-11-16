@@ -341,7 +341,7 @@ export default function SubscriptionHistoryPage() {
                 Historique des <span className="text-[var(--accent)]">Abonnements</span>
               </h1>
               <p className="text-xs text-[var(--foreground-muted)] font-mono">
-                Consultez l'historique complet de tous les abonnements
+                Consultez l&apos;historique complet de tous les abonnements
               </p>
             </div>
           </div>

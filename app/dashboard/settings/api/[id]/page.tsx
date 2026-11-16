@@ -131,7 +131,7 @@ export default async function ApiKeyDetailPage({ params }: PageProps) {
             </div>
           </div>
           <div>
-            <label className="text-[10px] font-black uppercase tracking-wider text-[var(--foreground-muted)]">Date d'expiration</label>
+            <label className="text-[10px] font-black uppercase tracking-wider text-[var(--foreground-muted)]">Date d&apos;expiration</label>
             <p className="mt-1 text-sm">{apiKey.expiresAt ? new Date(apiKey.expiresAt).toLocaleDateString() : "Jamais"}</p>
           </div>
           <div>
@@ -150,7 +150,7 @@ export default async function ApiKeyDetailPage({ params }: PageProps) {
         <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl p-6">
           <div className="flex items-center gap-2 mb-4">
             <Activity size={18} className="text-indigo-500" />
-            <h3 className="text-base font-black">Statistiques d'utilisation</h3>
+            <h3 className="text-base font-black">Statistiques d&apos;utilisation</h3>
           </div>
           <div className="space-y-3">
             <div className="flex justify-between items-center">

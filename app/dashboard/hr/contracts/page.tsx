@@ -63,7 +63,10 @@ interface Contract {
 }
 
 export default function ContractsPage() {
-  const [loading, setLoading] = useState(false);
+    // Starts true: the effect below loads on mount, so the first paint is already
+  // "loading". Setting it inside the effect was a synchronous setState there,
+  // which schedules a second render before the first has committed.
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -94,7 +97,6 @@ export default function ContractsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     (async () => {
       const [contractsResult, employeesResult] = await Promise.all([listContractsAction(), listEmployeesAction({ limit: 500 })]);
       if (cancelled) return;
@@ -132,9 +134,8 @@ export default function ContractsPage() {
     };
   }, []);
 
-  useEffect(() => {
-    filterContracts();
-  }, [searchTerm, typeFilter, statusFilter, departmentFilter, contracts]);
+  // Filtering is derived from state below; the effect that used to call
+  // filterContracts() discarded the result and only forced a re-render.
 
   const filterContracts = () => {
     let filtered = [...contracts];
@@ -454,7 +455,7 @@ export default function ContractsPage() {
                         </p>
                         {contract.probationEndDate && new Date(contract.probationEndDate) > new Date() && (
                           <p className="text-[9px] text-amber-500 mt-0.5">
-                            Période d'essai jusqu'au {formatDate(contract.probationEndDate)}
+                            Période d&apos;essai jusqu&apos;au {formatDate(contract.probationEndDate)}
                           </p>
                         )}
                       </div>
@@ -621,7 +622,7 @@ export default function ContractsPage() {
                   <input type="number" className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période d'essai (jours)</label>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période d&apos;essai (jours)</label>
                   <input type="number" className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm" placeholder="90" />
                 </div>
               </div>

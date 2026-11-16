@@ -49,7 +49,10 @@ interface Department {
 }
 
 export default function DepartmentsPage() {
-  const [loading, setLoading] = useState(false);
+    // Starts true: the effect below loads on mount, so the first paint is already
+  // "loading". Setting it inside the effect was a synchronous setState there,
+  // which schedules a second render before the first has committed.
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
@@ -72,20 +75,20 @@ export default function DepartmentsPage() {
     totalBudget: departments.reduce((sum, d) => sum + d.budget, 0)
   };
 
-  const loadDepartments = async () => {
-    setLoading(true);
+  /** Pure fetch: returns the mapped rows, or null on failure. No setState, so it
+   * is safe to call from an effect body. */
+  const fetchDepartments = async () => {
     const [departmentsResult, employeesResult] = await Promise.all([listDepartmentsAction(), listEmployeesAction({ limit: 500 })]);
     if (!departmentsResult.success) {
       toast.error("Impossible de charger les départements");
-      setLoading(false);
-      return;
+      return null;
     }
     const counts = new Map<string, number>();
     for (const employee of employeesResult.employees) {
       const key = employee.department ?? "";
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-    setDepartments(departmentsResult.departments.map((department) => ({
+    return departmentsResult.departments.map((department) => ({
       id: department.id,
       name: department.name,
       code: department.code || department.name.slice(0, 3).toUpperCase(),
@@ -98,17 +101,34 @@ export default function DepartmentsPage() {
       description: "",
       status: "active" as const,
       createdAt: new Date().toISOString(),
-    })));
+    }));
+  };
+
+  /** Manual reload (after a mutation). */
+  const loadDepartments = async () => {
+    setLoading(true);
+    const rows = await fetchDepartments();
+    if (rows) setDepartments(rows);
     setLoading(false);
   };
 
   useEffect(() => {
-    void loadDepartments();
+    let cancelled = false;
+    (async () => {
+      const rows = await fetchDepartments();
+      if (cancelled) return;
+      if (rows) setDepartments(rows);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    filterDepartments();
-  }, [searchTerm, statusFilter, departments]);
+
+  // No effect is needed to filter: `filterDepartments()` is pure and the result
+  // is already computed below. The old effect discarded its return value, so all
+  // it did was re-render.
 
   const filterDepartments = () => {
     let filtered = [...departments];

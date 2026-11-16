@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, asc, eq, lte, sql } from "drizzle-orm";
-import { getDb } from "../../db/client";
+import { getDb, runPrivileged } from "../../db/client";
 import { outboxEvents } from "../../db/schema";
 import { env } from "../../config/env";
 import { MailService } from "../../shared/mail/mail.service";
@@ -28,8 +28,18 @@ export class OutboxService {
 
   constructor(private readonly mail: MailService) {}
 
-  /** Claims and handles a batch of due events. Safe to call concurrently. */
+  /**
+   * Claims and handles a batch of due events. Safe to call concurrently.
+   *
+   * Runs on the privileged connection: `outbox_events` is FORCE-RLS and the queue
+   * spans every tenant, so on the application role the claim query matches
+   * nothing and delivery silently stops.
+   */
   async processPending(limit = 20): Promise<OutboxRunResult> {
+    return runPrivileged(() => this.processBatch(limit));
+  }
+
+  private async processBatch(limit: number): Promise<OutboxRunResult> {
     const db = getDb();
     const result: OutboxRunResult = { claimed: 0, processed: 0, failed: 0, errors: [] };
 

@@ -63,7 +63,7 @@ export default async function NewClientPage() {
         <div className="p-2 bg-[var(--card-bg)] rounded-xl border border-[var(--border)] group-hover:border-[var(--accent)]/30 transition-all">
           <ArrowLeft size={16} />
         </div>
-        Retour à l'annuaire
+        Retour à l&apos;annuaire
       </Link>
 
       {/* Header Card */}
@@ -104,11 +104,11 @@ export default async function NewClientPage() {
         </div>
         <div className="space-y-1">
           <h4 className="text-xs font-black text-[var(--foreground)] uppercase tracking-widest italic">
-            Contrôle d'unicité du code
+            Contrôle d&apos;unicité du code
           </h4>
           <p className="text-[11px] text-[var(--foreground-muted)] font-medium">
-            Le <span className="text-amber-400 font-bold italic">Code Client</span> est l'identifiant pivot pour vos exports comptables.
-            Assurez-vous qu'il ne soit pas déjà utilisé pour éviter les conflits lors de la génération automatique de vos factures.
+            Le <span className="text-amber-400 font-bold italic">Code Client</span> est l&apos;identifiant pivot pour vos exports comptables.
+            Assurez-vous qu&apos;il ne soit pas déjà utilisé pour éviter les conflits lors de la génération automatique de vos factures.
           </p>
         </div>
       </div>

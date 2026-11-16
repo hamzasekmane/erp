@@ -42,7 +42,7 @@ export default async function NewApiKeyPage() {
             Nouvelle <span className="text-indigo-500">clé API</span>
           </h1>
           <p className="text-xs text-[var(--foreground-muted)] font-mono">
-            Créez une nouvelle clé d'accès à l'API
+            Créez une nouvelle clé d&apos;accès à l&apos;API
           </p>
         </div>
       </div>

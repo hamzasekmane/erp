@@ -4,7 +4,9 @@ import { reportService } from '@/app/services/api.service';
 import { DollarSign, Package, Percent, ShoppingCart } from 'lucide-react';
 
 export function useAnalyticsData(dateRange: string) {
-  const [isLoading, setIsLoading] = useState(false);
+  // Starts true: the effect below fetches on mount, so the first paint is already
+  // loading. Setting it inside the effect body was a synchronous setState there.
+  const [isLoading, setIsLoading] = useState(true);
   const [analyticsCards, setAnalyticsCards] = useState<any[]>([]);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [trafficSources, setTrafficSources] = useState<any[]>([]);
@@ -34,8 +36,9 @@ export function useAnalyticsData(dateRange: string) {
     }
   }, [dateRange]);
 
+  /** Pure fetch: returns the card data, or null on failure. No setState, so the
+   * mount effect and refresh button can share it without cascading renders. */
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
     try {
       const params = getApiParams();
 
@@ -156,7 +159,10 @@ export function useAnalyticsData(dateRange: string) {
   const refreshData = useCallback(() => fetchData(), [fetchData]);
 
   useEffect(() => {
-    fetchData();
+    // The await keeps every setState inside fetchData off the render path.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   return {

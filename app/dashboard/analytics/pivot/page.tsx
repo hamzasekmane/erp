@@ -439,7 +439,7 @@ export default function PivotTablesPage() {
                   }}
                   className="flex-1 px-4 py-2 bg-cyan-500 text-white rounded-xl font-medium hover:bg-cyan-600 transition-colors"
                 >
-                  Générer l'analyse
+                  Générer l&apos;analyse
                 </button>
               </div>
             </div>

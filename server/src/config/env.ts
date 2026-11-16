@@ -92,9 +92,40 @@ export const env = parsed.data;
 export const isProd = env.NODE_ENV === "production";
 export const useEmbeddedDb = !env.DATABASE_URL;
 
+/** Values that are shipped in the example files and must never reach production. */
+const PLACEHOLDER_SECRETS = [
+  "replace-with",
+  "change-me",
+  "changeme",
+  "your-secret",
+  "example-secret",
+  "replace_me",
+] as const;
+
 const productionProblems: string[] = [];
 if (isProd) {
-  if (env.JWT_SECRET.startsWith("dev-only")) productionProblems.push("JWT_SECRET must be set to a strong random value");
+  // A weak or PLACEHOLDER secret is the most severe misconfiguration there is:
+  // anyone holding it can forge an access token for any tenant, and nothing else
+  // in the system would notice. Checking for the literal values shipped in
+  // `.env.production.example` is not paranoia — copying that file and forgetting
+  // to edit it is the most likely path to production, and the placeholder is
+  // public.
+  for (const placeholder of PLACEHOLDER_SECRETS) {
+    if (env.JWT_SECRET.startsWith(placeholder) || env.JWT_SECRET === placeholder) {
+      productionProblems.push(
+        "JWT_SECRET is still the placeholder from .env.production.example — generate one with `openssl rand -base64 48`",
+      );
+      break;
+    }
+  }
+  if (env.JWT_SECRET.startsWith("dev-only")) {
+    productionProblems.push("JWT_SECRET must be set to a strong random value");
+  }
+  // Entropy floor. Length alone is not strength, but a 24-character secret made
+  // of one repeated character passes the length check and is trivially guessable.
+  if (new Set(env.JWT_SECRET).size < 12) {
+    productionProblems.push("JWT_SECRET looks like a repeated pattern; use a random value");
+  }
   if (!env.DATABASE_URL) productionProblems.push("DATABASE_URL is required (the embedded PGlite database is for development only)");
   if (env.CORS_ORIGINS.trim() === "" || env.CORS_ORIGINS.includes("*")) productionProblems.push("CORS_ORIGINS must list explicit origins");
   if (env.CHARGILY_SECRET_KEY) {

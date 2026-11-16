@@ -420,7 +420,7 @@ export default function SubscriptionAnalyticsPage() {
               <div className="p-1.5 bg-[var(--accent)]/10 rounded-lg">
                 <Calendar size={14} className="text-[var(--accent)]" />
               </div>
-              <h3 className="font-black">Périodes d'abonnement</h3>
+              <h3 className="font-black">Périodes d&apos;abonnement</h3>
             </div>
             
             <div className="flex items-center justify-center gap-8 mb-6">

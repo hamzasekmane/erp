@@ -60,9 +60,18 @@ export default async function NewInvoicePage() {
     console.log("🔍 Fetching clients and products...");
   }
 
+  // Declared here, not inside the try: the JSX below reads them, and a tree
+  // built inside a try/catch cannot be caught by that catch.
+  let subscriptionError: SubscriptionError | null = null;
+  let clients: any[] = [];
+  let products: any[] = [];
+  let clientsError = false;
+  let productsError = false;
+  let clientsRes: PromiseSettledResult<Response>;
+  let productsRes: PromiseSettledResult<Response>;
   try {
     // ✅ Parallel fetching avec gestion d'erreur améliorée
-    const [clientsRes, productsRes] = await Promise.allSettled([
+    [clientsRes, productsRes] = await Promise.allSettled([
       fetch(`${API_URL}/clients?limit=1000`, { 
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
@@ -74,7 +83,7 @@ export default async function NewInvoicePage() {
     ]);
 
     // ✅ Check for subscription expired errors in responses
-    let subscriptionError: SubscriptionError | null = null;
+    subscriptionError = null;
 
     // Check clients response for 403
     if (clientsRes.status === 'fulfilled') {
@@ -132,16 +141,12 @@ export default async function NewInvoicePage() {
       }
     }
 
-    // Show subscription expired if detected
-    if (subscriptionError) {
-      return <SubscriptionExpired error={subscriptionError} />;
-    }
 
     // ✅ Traitement sécurisé des réponses
-    let clients: any[] = [];
-    let products: any[] = [];
-    let clientsError = false;
-    let productsError = false;
+    clients = [];
+    products = [];
+    clientsError = false;
+    productsError = false;
 
     if (clientsRes.status === 'fulfilled' && clientsRes.value.ok) {
       const data = await clientsRes.value.json().catch(() => ({}));
@@ -165,11 +170,19 @@ export default async function NewInvoicePage() {
       productsError = true;
       if (IS_DEV) console.error("❌ Failed to load products:", productsRes);
     }
+  } catch (error: any) {
+    if (IS_DEV) console.error("Unexpected error:", error);
+  }
 
-    // If both failed completely
-    if (clientsError && productsError) {
-      return <CompleteErrorState />;
-    }
+  // The subscription gate is presentation, so it is decided here — after the
+  // try — rather than returning from inside it.
+  if (subscriptionError) {
+    return <SubscriptionExpired error={subscriptionError} />;
+  }
+
+  if (clientsError && productsError) {
+    return <CompleteErrorState />;
+  }
 
     return (
       <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
@@ -294,7 +307,7 @@ export default async function NewInvoicePage() {
                         <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                           <p className="text-[10px] font-black text-amber-400 uppercase flex items-center gap-2">
                             <AlertCircle size={12} />
-                            Aucun client trouvé - Créez d'abord un client
+                            Aucun client trouvé - Créez d&apos;abord un client
                           </p>
                         </div>
                       )}
@@ -346,30 +359,8 @@ export default async function NewInvoicePage() {
         </div>
       </div>
     );
-  } catch (error: any) {
-    // Handle any unexpected errors
-    if (IS_DEV) console.error("❌ Unexpected error:", error);
-    
-    // Check if it's a subscription expired error
-    if (error?.status === 403 || error?.error_code === "SUBSCRIPTION_EXPIRED") {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: error?.message || "باقة الاشتراك منتهية",
-            data: error?.data || {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0
-            }
-          }}
-        />
-      );
-    }
-    
-    return <CompleteErrorState />;
-  }
 }
+
 
 /* ------------------------------------------------ */
 /* Complete Error State */

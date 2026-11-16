@@ -61,7 +61,10 @@ interface Payroll {
 }
 
 export default function PayrollPage() {
-  const [loading, setLoading] = useState(false);
+    // Starts true: the effect below loads on mount, so the first paint is already
+  // "loading". Setting it inside the effect was a synchronous setState there,
+  // which schedules a second render before the first has committed.
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
@@ -90,7 +93,6 @@ export default function PayrollPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     (async () => {
       const month = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
       const result = await payrollAction(month);
@@ -125,9 +127,8 @@ export default function PayrollPage() {
     };
   }, [selectedMonth, selectedYear]);
 
-  useEffect(() => {
-    filterPayrolls();
-  }, [searchTerm, statusFilter, departmentFilter, selectedMonth, selectedYear, payrolls]);
+  // Filtering is derived from state below; the effect that used to call
+  // filterPayrolls() discarded the result and only forced a re-render.
 
   const filterPayrolls = () => {
     let filtered = [...payrolls];

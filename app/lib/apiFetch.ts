@@ -31,7 +31,6 @@ export async function apiFetch<T>(
 ): Promise<T> {
 
   let res: Response;
-
   try {
     res = await fetch(`${apiUrl()}${endpoint}`, {
       ...options,
@@ -42,7 +41,7 @@ export async function apiFetch<T>(
       },
       cache: "no-store",
     });
-  } catch (err) {
+  } catch {
     throw new ApiError(
       "Network error. Impossible de contacter le serveur."
     );

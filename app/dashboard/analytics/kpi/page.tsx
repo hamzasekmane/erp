@@ -321,7 +321,7 @@ export default function KpiDashboardPage() {
               <div>
                 <h3 className="text-lg font-black flex items-center gap-2">
                   <TrendingUp size={18} className="text-emerald-500" />
-                  Évolution du chiffre d'affaires
+                  Évolution du chiffre d&apos;affaires
                 </h3>
                 <p className="text-xs text-[var(--foreground-muted)]">Comparaison mensuelle</p>
               </div>

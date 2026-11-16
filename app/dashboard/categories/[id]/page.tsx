@@ -146,7 +146,7 @@ export default async function CategoryDetailPage({ params }: { params: Promise<{
 
             <div className="mt-8 p-5 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-[2rem]">
               <p className="text-[9px] font-bold text-amber-700 dark:text-amber-500 leading-relaxed uppercase italic">
-                Attention: Modifier ce segment impactera l'affichage de tous les produits associés.
+                Attention: Modifier ce segment impactera l&apos;affichage de tous les produits associés.
               </p>
             </div>
           </div>

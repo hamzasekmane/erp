@@ -30,122 +30,88 @@ const IS_DEV = process.env.NODE_ENV === "development";
 export default async function ClientNotesPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get("token")?.value;
-  
+
   if (!token) redirect("/login");
+
+  // Only the fetch lives in the try: JSX returned from a try/catch is not
+  // protected by it, because React renders the element after the block has
+  // already completed.
+  let notes: any[] = [];
+  let loadError: unknown = null;
 
   try {
     const response = await clientNoteService.getAllNotes(token);
-    const notes = response.data || [];
+    notes = response.data || [];
+  } catch (error) {
+    loadError = error;
+  }
 
-    return <NotesList notes={notes} />;
-  } catch (error: any) {
-    // 🔍 DEBUG: Log the full error structure
-    if (IS_DEV) {
-      console.log("🔍 FULL ERROR OBJECT START ==================");
-      console.log("🔍 ERROR TYPE:", typeof error);
-      console.log("🔍 ERROR IS NULL?:", error === null);
-      console.log("🔍 ERROR IS UNDEFINED?:", error === undefined);
-      console.log("🔍 ERROR CONSTRUCTOR:", error?.constructor?.name);
-      console.log("🔍 ERROR KEYS:", Object.keys(error || {}));
-      console.log("🔍 ERROR STATUS:", error?.status);
-      console.log("🔍 ERROR_CODE:", error?.error_code);
-      console.log("🔍 ERROR MESSAGE:", error?.message);
-      console.log("🔍 ERROR DATA:", error?.data);
-      console.log("🔍 ERROR RESPONSE:", error?.response);
-      console.log("🔍 FULL ERROR OBJECT:", JSON.stringify(error, null, 2));
-      console.log("🔍 FULL ERROR OBJECT END ==================");
-    }
-    
-    // Check for 403 errors (subscription expired)
-    if (error?.status === 403) {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: error.message || "باقة الاشتراك منتهية، يرجى التجديد لاستعادة الصلاحيات",
-            data: error.data || {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0,
-            },
-          }}
-        />
-      );
-    }
+  if (IS_DEV && loadError) {
+    console.log("🔍 Échec du chargement des notes:", loadError);
+  }
 
-    // Check if error has error_code property
-    if (error?.error_code === "SUBSCRIPTION_EXPIRED") {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: error.message || "باقة الاشتراك منتهية، يرجى التجديد لاستعادة الصلاحيات",
-            data: error.data || {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0,
-            },
-          }}
-        />
-      );
-    }
+  const subscriptionError = describeSubscriptionError(loadError);
+  if (subscriptionError) {
+    return <SubscriptionExpired error={subscriptionError} />;
+  }
 
-    // Check nested response
-    if (error?.response?.error_code === "SUBSCRIPTION_EXPIRED") {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: error.response.message || "باقة الاشتراك منتهية",
-            data: error.response.data || {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0,
-            },
-          }}
-        />
-      );
-    }
-
-    // If error has data property with error_code
-    if (error?.data?.error_code === "SUBSCRIPTION_EXPIRED") {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: error.data.message || "باقة الاشتراك منتهية",
-            data: error.data.data || {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0,
-            },
-          }}
-        />
-      );
-    }
-
-    // Check for any 403 status anywhere in the error object
-    if (error?.status === 403 || error?.response?.status === 403 || error?.data?.status === 403) {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: "باقة الاشتراك منتهية، يرجى التجديد لاستعادة الصلاحيات",
-            data: {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0,
-            },
-          }}
-        />
-      );
-    }
-
-    // Log only unexpected errors
-    if (IS_DEV) console.error("❌ Erreur lors du chargement des notes:", error);
-
+  if (loadError) {
     return <ErrorState />;
   }
+
+  return <NotesList notes={notes} />;
+}
+
+/**
+ * Normalises the many shapes the API client can throw a subscription error in
+ * (flat, nested under `response`, nested under `data`, or a bare 403) into the
+ * payload `SubscriptionExpired` expects. Returns null for any other failure.
+ */
+function describeSubscriptionError(error: any): SubscriptionError | null {
+  if (!error) return null;
+
+  const fallback = {
+    expiredSince: new Date().toISOString(),
+    daysOverdue: 0,
+  };
+
+  if (error?.status === 403 || error?.response?.status === 403 || error?.data?.status === 403) {
+    return {
+      success: false,
+      error_code: "SUBSCRIPTION_EXPIRED",
+      message: error.message || "باقة الاشتراك منتهية، يرجى التجديد لاستعادة الصلاحيات",
+      data: error.data || fallback,
+    };
+  }
+
+  if (error?.error_code === "SUBSCRIPTION_EXPIRED") {
+    return {
+      success: false,
+      error_code: "SUBSCRIPTION_EXPIRED",
+      message: error.message || "باقة الاشتراك منتهية، يرجى التجديد لاستعادة الصلاحيات",
+      data: error.data || fallback,
+    };
+  }
+
+  if (error?.response?.error_code === "SUBSCRIPTION_EXPIRED") {
+    return {
+      success: false,
+      error_code: "SUBSCRIPTION_EXPIRED",
+      message: error.response.message || "باقة الاشتراك منتهية",
+      data: error.response.data || fallback,
+    };
+  }
+
+  if (error?.data?.error_code === "SUBSCRIPTION_EXPIRED") {
+    return {
+      success: false,
+      error_code: "SUBSCRIPTION_EXPIRED",
+      message: error.data.message || "باقة الاشتراك منتهية",
+      data: error.data.data || fallback,
+    };
+  }
+
+  return null;
 }
 
 /* ------------------------------------------------ */

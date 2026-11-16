@@ -100,14 +100,19 @@ export default function InvoiceForm({ clients, products, token, initialData }: I
 
   // ✅ Récupération du solde client
   useEffect(() => {
-    if (!clientId) {
-      setSelectedClientData(null);
-      return;
-    }
-    
-    const client = clients.find(c => c._id === clientId);
-    
+    // Every setState below happens after an await (or in an early return that the
+    // `clientId` guard already covers), so this effect never cascades a render
+    // synchronously on mount.
+    let cancelled = false;
+
     const fetchBalance = async () => {
+      if (!clientId) {
+        setSelectedClientData(null);
+        return;
+      }
+
+      const client = clients.find(c => c._id === clientId);
+
       try {
         const url = `${process.env.NEXT_PUBLIC_API_URL}/clients/${clientId}/balance`;
         console.log("Fetching:", url);
@@ -116,6 +121,7 @@ export default function InvoiceForm({ clients, products, token, initialData }: I
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store'
         });
+        if (cancelled) return;
 
         const text = await res.text();
 
@@ -123,21 +129,25 @@ export default function InvoiceForm({ clients, products, token, initialData }: I
 
         const data = JSON.parse(text);
 
-        setSelectedClientData({ 
-          ...client, 
-          currentBalance: data.balance || 0 
+        setSelectedClientData({
+          ...client,
+          currentBalance: data.balance || 0
         });
 
       } catch (err) {
+        if (cancelled) return;
         console.error('Erreur chargement solde:', err);
-        setSelectedClientData({ 
-          ...client, 
-          currentBalance: 0 
+        setSelectedClientData({
+          ...client,
+          currentBalance: 0
         });
       }
     };
-    
-    fetchBalance();
+
+    void fetchBalance();
+    return () => {
+      cancelled = true;
+    };
   }, [clientId, clients, token]);
 
   // ✅ Gestion du retour de l'action
@@ -588,7 +598,7 @@ export default function InvoiceForm({ clients, products, token, initialData }: I
         {isDateInvalid && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[8px] font-bold text-rose-400 uppercase flex items-center gap-2">
             <AlertCircle size={12} />
-            La date d'échéance doit être postérieure à la date d'émission
+            La date d&apos;échéance doit être postérieure à la date d&apos;émission
           </div>
         )}
       </div>

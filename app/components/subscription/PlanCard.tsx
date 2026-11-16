@@ -158,7 +158,7 @@ export default function PlanCard({ plan, currentSubscription }: PlanCardProps) {
         </div>
         {plan.trialDays > 0 && (
           <div className="text-amber-500 text-[10px] flex items-center gap-1">
-            <Zap size={10} /> {plan.trialDays} jours d'essai gratuit
+            <Zap size={10} /> {plan.trialDays} jours d&apos;essai gratuit
           </div>
         )}
       </div>

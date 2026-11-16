@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { TrendingUp, TrendingDown, ArrowRight } from 'lucide-react';
 import { AnalyticsCard } from '@/app/types/analytics.types';
-import { getIcon } from './IconMapper';
+import { DynamicIcon } from './IconMapper';
 
 interface KPICardProps {
   card: AnalyticsCard;
@@ -18,8 +18,6 @@ const colorClasses = {
 };
 
 export function KPICard({ card }: KPICardProps) {
-  const Icon = getIcon(card.iconName ?? card.icon);
-
   return (
     <Link
       href={card.href}
@@ -27,7 +25,7 @@ export function KPICard({ card }: KPICardProps) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2 rounded-xl ${colorClasses[card.color as keyof typeof colorClasses]} group-hover:scale-110 transition-transform`}>
-          <Icon size={18} />
+          <DynamicIcon name={card.iconName ?? card.icon} size={18} />
         </div>
         <div className={`flex items-center gap-1 text-xs font-medium ${
           card.trend === 'up' ? 'text-emerald-500' : 'text-red-500'

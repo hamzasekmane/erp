@@ -15,21 +15,21 @@ const PLANS = [
 
 export default function RegisterForm() {
   const [state, formAction, isPending] = useActionState(registerAction, null);
-  const [selectedPlan, setSelectedPlan] = useState("free");
-  const [showSuccess, setShowSuccess] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  useEffect(() => {
+  // The URL is the initial value, not something to copy into state in an effect:
+  // `useState` takes an initialiser function, which runs once and reads the same
+  // value without a second render.
+  const [selectedPlan, setSelectedPlan] = useState(() => {
     const planFromUrl = searchParams.get("plan");
-    if (planFromUrl && PLANS.find((p) => p.id === planFromUrl)) {
-      setSelectedPlan(planFromUrl);
-    }
-  }, [searchParams]);
+    return planFromUrl && PLANS.find((p) => p.id === planFromUrl) ? planFromUrl : "free";
+  });
+  // Likewise derived from the action result instead of mirrored into state.
+  const showSuccess = Boolean(state?.success);
 
   useEffect(() => {
     if (state?.success) {
-      setShowSuccess(true);
       toast.success("Bienvenue dans l'écosystème Velora !");
       setTimeout(() => router.push("/dashboard"), 2000);
     } else if (state?.message && !state?.success) {

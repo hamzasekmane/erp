@@ -1,3 +1,8 @@
+import typography from '@tailwindcss/typography';
+import forms from '@tailwindcss/forms';
+import aspectRatio from '@tailwindcss/aspect-ratio';
+import containerQueries from '@tailwindcss/container-queries';
+
 /** @type {import('tailwindcss').Config} */
 const config = {
   darkMode: 'class',
@@ -348,12 +353,10 @@ const config = {
     },
     
     // إضافة plugin لتحسين الأداء
-    require('@tailwindcss/typography'),
-    require('@tailwindcss/forms')({
-      strategy: 'class', // استخدام class بدلاً من auto
-    }),
-    require('@tailwindcss/aspect-ratio'),
-    require('@tailwindcss/container-queries'),
+    typography,
+    forms({ strategy: 'class' }),
+    aspectRatio,
+    containerQueries,
   ],
 };
 

@@ -35,7 +35,7 @@ export function DeleteButton({ apiKeyId, apiKeyName, onDelete }: DeleteButtonPro
             <h3 className="text-lg font-black">Confirmer la révocation</h3>
           </div>
           <p className="text-sm text-[var(--foreground-muted)] mb-6">
-            Êtes-vous sûr de vouloir révoquer la clé API "{apiKeyName}" ? 
+            Êtes-vous sûr de vouloir révoquer la clé API &quot;{apiKeyName}&quot; ? 
             Cette action est irréversible et toutes les intégrations utilisant cette clé cesseront de fonctionner.
           </p>
           <div className="flex flex-wrap gap-2 sm:gap-3">

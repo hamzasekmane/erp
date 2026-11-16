@@ -7,7 +7,7 @@ export default function Contact() {
       <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row gap-16 relative z-10">
         <div className="flex-1">
           <h2 className="text-5xl font-black mb-6 leading-tight">
-            Besoin d'aide ? <br />
+            Besoin d&apos;aide ? <br />
             <span className="text-blue-600">On vous répond.</span>
           </h2>
           <p className="text-gray-600 text-lg mb-8">

@@ -237,7 +237,7 @@ export default async function InvoiceDetailPage({
                   <FileText size={12} /> Notes & Conditions
                 </p>
                 <p className="text-[11px] text-[var(--foreground-muted)]/70 leading-relaxed font-medium">
-                  Le règlement s'effectue à réception. Toute facture impayée à l'échéance sera majorée de pénalités de retard au taux légal.
+                  Le règlement s&apos;effectue à réception. Toute facture impayée à l&apos;échéance sera majorée de pénalités de retard au taux légal.
                 </p>
               </div>
               

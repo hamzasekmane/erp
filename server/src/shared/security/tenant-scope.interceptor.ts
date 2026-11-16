@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import { from, lastValueFrom, type Observable } from "rxjs";
-import { currentTenantId, runGlobal, runTenant } from "../../db/client";
+import { currentTenantId, runGlobal, runPrivileged, runTenant } from "../../db/client";
 import type { AuthContext } from "./decorators";
 
 /** Routes that are platform-wide by design and must see every tenant. */
@@ -39,7 +39,12 @@ export class TenantScopeInterceptor implements NestInterceptor {
 
     const path = request.originalUrl ?? request.url ?? "";
     if (CROSS_TENANT_PREFIXES.some((prefix) => path.startsWith(prefix))) {
-      return from(runGlobal(async () => lastValueFrom(next.handle())));
+      // Platform-wide routes are inherently cross-tenant: on the application
+      // role, RLS would hide every other tenant and the admin console would show
+      // one empty page after another. They run on the privileged connection when
+      // one is configured, and fall back to the plain handle otherwise (local and
+      // embedded setups, where the connection already bypasses RLS).
+      return from(runGlobal(() => runPrivileged(async () => lastValueFrom(next.handle()))));
     }
 
     return from(runTenant(tenantId, async () => lastValueFrom(next.handle())));

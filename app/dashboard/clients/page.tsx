@@ -47,38 +47,48 @@ export default async function ClientsPage({
     if (val) query.append(key, String(val))
   })
 
+  // Only the fetch is wrapped: React renders the returned element after the
+  // try/catch has already completed, so JSX built inside it is unprotected.
+  let clients: Client[] = []
+  let totalCount = 0
+  let loadError: any = null
+
   try {
     const response = await clientService.getAllClients(token, query.toString())
-    const clients: Client[] = response?.data || []
-    const totalCount = response?.pagination?.total || clients.length
+    clients = response?.data || []
+    totalCount = response?.pagination?.total || clients.length
+  } catch (error) {
+    loadError = error
+  }
 
+  if (loadError instanceof SubscriptionExpiredError) {
     return (
-      <ClientsTable
-        clients={clients}
-        totalCount={totalCount}
-        searchQuery={params?.search as string}
+      <SubscriptionExpired
+        error={{
+          success: false,
+          error_code: "SUBSCRIPTION_EXPIRED",
+          message: loadError.message,
+          data: loadError.data || {
+            expiredSince: new Date().toISOString(),
+            daysOverdue: 0,
+          },
+        }}
       />
     )
-  } catch (error: any) {
-    if (error instanceof SubscriptionExpiredError) {
-      return (
-        <SubscriptionExpired
-          error={{
-            success: false,
-            error_code: "SUBSCRIPTION_EXPIRED",
-            message: error.message,
-            data: error.data || {
-              expiredSince: new Date().toISOString(),
-              daysOverdue: 0,
-            },
-          }}
-        />
-      )
-    }
+  }
 
-    if (IS_DEV) console.error("Error loading clients:", error)
+  if (loadError) {
+    if (IS_DEV) console.error("Error loading clients:", loadError)
     return <ErrorState />
   }
+
+  return (
+    <ClientsTable
+      clients={clients}
+      totalCount={totalCount}
+      searchQuery={params?.search as string}
+    />
+  )
 }
 
 /* ------------------------------------------------ */

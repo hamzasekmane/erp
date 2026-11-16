@@ -494,7 +494,7 @@ export default function CreateSubscriptionPage() {
                     
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-medium mb-1">Date d'expiration *</label>
+                        <label className="block text-xs font-medium mb-1">Date d&apos;expiration *</label>
                         <div className="relative">
                           <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--foreground-muted)]" />
                           <input
@@ -604,7 +604,7 @@ export default function CreateSubscriptionPage() {
                 {selectedPeriod === "yearly" && (
                   <div className="mb-4 p-2 bg-emerald-500/10 rounded-lg text-center">
                     <p className="text-[10px] font-medium text-emerald-500">
-                      ✨ Économisez {yearlySavings}€ avec l'abonnement annuel
+                      ✨ Économisez {yearlySavings}€ avec l&apos;abonnement annuel
                     </p>
                   </div>
                 )}
@@ -669,7 +669,7 @@ export default function CreateSubscriptionPage() {
               ) : (
                 <>
                   <Sparkles size={16} />
-                  Confirmer l'abonnement
+                  Confirmer l&apos;abonnement
                 </>
               )}
             </button>

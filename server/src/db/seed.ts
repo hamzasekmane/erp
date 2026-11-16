@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { closeDb, getDb, initDb } from "./client";
+import { closeDb, getDb, initDb, runPrivileged } from "./client";
 import { ensureBaselinePlans } from "./bootstrap";
 import { migrate } from "./migrate";
 import {
@@ -379,13 +379,20 @@ async function main() {
   await initDb();
   await migrate();
   await ensureBaselinePlans();
-  await seedPlatform();
 
+  // Seeding is a bootstrap operation: it creates tenants and their first users,
+  // which is cross-tenant by nature and has no `app.tenant_id` to run under.
+  // With the production split (API as `erp_app`, migrations as the owner) every
+  // INSERT here is rejected by FORCE RLS unless it runs on the privileged
+  // connection — the seed would fail before the first tenant existed.
   const withDemo = process.env.SEED_DEMO ? process.env.SEED_DEMO !== "false" : !isProd;
-  if (withDemo) {
-    await seedDemo(process.env.SEED_DEMO_PLAN ?? "professional");
-    await seedDemoOps();
-  }
+  await runPrivileged(async () => {
+    await seedPlatform();
+    if (withDemo) {
+      await seedDemo(process.env.SEED_DEMO_PLAN ?? "professional");
+      await seedDemoOps();
+    }
+  });
 
   console.log("seed complete");
   console.log(`platform admin: ${ADMIN_EMAIL} (password ${isProd ? "set from SEED_ADMIN_PASSWORD" : `= ${ADMIN_PASSWORD}`})`);

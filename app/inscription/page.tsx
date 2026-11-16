@@ -50,7 +50,7 @@ export default function RegisterPage() {
              {[...Array(5)].map((_, i) => <Star key={i} size={14} fill="currentColor" />)}
           </div>
           <p className="text-zinc-300 text-lg italic leading-relaxed">
-            "L'interface est d'une clarté incroyable. Nous avons réduit notre temps de gestion de 40%."
+            &quot;L&apos;interface est d&apos;une clarté incroyable. Nous avons réduit notre temps de gestion de 40%.&quot;
           </p>
           <div className="mt-6 flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center font-black text-black">HS</div>

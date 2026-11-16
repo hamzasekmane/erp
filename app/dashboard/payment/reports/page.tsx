@@ -108,7 +108,7 @@ export default async function PaymentReportsPage() {
           <AlertCircle className="mx-auto h-12 w-12 text-amber-500 mb-4" />
           <h2 className="text-xl font-black italic mb-2 text-zinc-900 dark:text-white">Aucune donnée disponible</h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6">
-            Il n'y a pas encore de transactions pour générer des rapports financiers.
+            Il n&apos;y a pas encore de transactions pour générer des rapports financiers.
           </p>
           <Link 
             href="/dashboard/payment/new"

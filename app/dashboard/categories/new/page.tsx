@@ -12,7 +12,7 @@ export default function NewCategoryPage() {
           href="/dashboard/categories" 
           className="flex items-center gap-2 text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all font-black uppercase text-[10px] tracking-[0.2em]"
         >
-          <ArrowLeft size={16} /> Retour à l'index
+          <ArrowLeft size={16} /> Retour à l&apos;index
         </Link>
         <div className="hidden md:flex items-center gap-2 text-cyan-600 bg-cyan-50 dark:bg-cyan-950/30 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-cyan-100 dark:border-cyan-900/50">
           <Sparkles size={12} /> Mode Configuration Système
@@ -32,7 +32,7 @@ export default function NewCategoryPage() {
               Créer un <br /> <span className="text-cyan-600">Nouveau Segment</span>
             </h1>
             <p className="text-zinc-500 font-bold text-xs uppercase leading-relaxed tracking-tight">
-              L'organisation par segments permet une analyse précise de vos performances commerciales et une gestion optimisée de la chaîne logistique.
+              L&apos;organisation par segments permet une analyse précise de vos performances commerciales et une gestion optimisée de la chaîne logistique.
             </p>
           </div>
 
@@ -42,7 +42,7 @@ export default function NewCategoryPage() {
               <span className="text-[10px] font-black uppercase tracking-widest">Validation Directe</span>
             </div>
             <p className="text-[9px] text-zinc-400 font-bold uppercase leading-normal">
-              Chaque segment créé est immédiatement disponible pour l'étiquetage de vos produits et la génération de rapports.
+              Chaque segment créé est immédiatement disponible pour l&apos;étiquetage de vos produits et la génération de rapports.
             </p>
           </div>
         </div>
@@ -53,7 +53,7 @@ export default function NewCategoryPage() {
           
           {/* NOTE DE BAS DE PAGE */}
           <p className="mt-8 text-center text-[9px] font-black uppercase text-zinc-300 dark:text-zinc-600 tracking-[0.3em]">
-            Système d'Inventaire Propulsé par Gemini AI v3.0
+            Système d&apos;Inventaire Propulsé par Gemini AI v3.0
           </p>
         </div>
 

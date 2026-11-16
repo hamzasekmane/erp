@@ -11,6 +11,42 @@ import type {
   AgingReportData,
 } from '@/app/services/analytics/analytics.mapper';
 
+type InitialData = {
+  sales: SalesReportData | null;
+  payments: PaymentReportData | null;
+  clients: ClientReportData | null;
+  products: ProductReportData | null;
+  aging: AgingReportData | null;
+};
+
+/**
+ * Loads the dashboard payload.
+ *
+ * Deliberately separate from rendering: JSX must not be constructed inside a
+ * `try` (react-hooks/error-boundaries). React renders asynchronously, so a throw
+ * from a child component would escape the catch entirely and the caller would
+ * believe the failure was handled. Fetching here and rendering below keeps the
+ * try/catch about data only, which is what it can actually catch.
+ */
+async function loadInitialData(token: string): Promise<InitialData> {
+  const params = { period: 'week' } as const;
+  const [sales, payments, clients, products, aging] = await Promise.allSettled([
+    analyticsService.getSalesReport(token, params),
+    analyticsService.getPaymentReport(token, params),
+    analyticsService.getClientReport(token, params),
+    analyticsService.getProductReport(token, params),
+    analyticsService.getAgingReport(token),
+  ]);
+
+  return {
+    sales: sales.status === 'fulfilled' ? sales.value : null,
+    payments: payments.status === 'fulfilled' ? payments.value : null,
+    clients: clients.status === 'fulfilled' ? clients.value : null,
+    products: products.status === 'fulfilled' ? products.value : null,
+    aging: aging.status === 'fulfilled' ? aging.value : null,
+  };
+}
+
 export default async function AnalyticsPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
@@ -19,32 +55,9 @@ export default async function AnalyticsPage() {
     redirect('/login');
   }
 
-  const params = { period: 'week' } as const;
-
+  let initialData: InitialData;
   try {
-    const [sales, payments, clients, products, aging] = await Promise.allSettled([
-      analyticsService.getSalesReport(token, params),
-      analyticsService.getPaymentReport(token, params),
-      analyticsService.getClientReport(token, params),
-      analyticsService.getProductReport(token, params),
-      analyticsService.getAgingReport(token),
-    ]);
-
-    const initialData = {
-      sales: sales.status === 'fulfilled' ? sales.value : null,
-      payments: payments.status === 'fulfilled' ? payments.value : null,
-      clients: clients.status === 'fulfilled' ? clients.value : null,
-      products: products.status === 'fulfilled' ? products.value : null,
-      aging: aging.status === 'fulfilled' ? aging.value : null,
-    };
-
-    return (
-      <AnalyticsDashboardClient
-        token={token}
-        initialData={initialData}
-        initialDateRange="7d"
-      />
-    );
+    initialData = await loadInitialData(token);
   } catch (error) {
     console.error('Failed to fetch initial analytics data:', error);
     return (
@@ -56,4 +69,12 @@ export default async function AnalyticsPage() {
       </div>
     );
   }
+
+  return (
+    <AnalyticsDashboardClient
+      token={token}
+      initialData={initialData}
+      initialDateRange="7d"
+    />
+  );
 }
