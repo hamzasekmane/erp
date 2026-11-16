@@ -855,11 +855,12 @@ and the children are orphaned instead.
 
 **Outstanding, stated rather than papered over:**
 
-* **Login cannot work under real RLS.** Login resolves a user by email before any
-  tenant is known, which the policies correctly forbid. This is an architecture
-  decision — a SECURITY DEFINER lookup returning only identifiers, or a separate
-  identity table — and it is *not* fixed here. It is the single largest gap
-  between "the policies are engaged" and "the application works under them".
+* ~~**Login cannot work under real RLS.**~~ **SOLVED — see §17.0k.** The
+  conclusion recorded here was that RLS made pre-tenant identity lookup
+  impossible. That was wrong: a `SECURITY DEFINER` helper owned by a role with
+  `BYPASSRLS` sees through FORCE RLS while the application role still cannot.
+  The original probe failed only because the function was owned by the database
+  owner, which FORCE applies to as well.
 * **The suite runs as a superuser in CI.** Running it entirely as a
   non-superuser role was attempted; most suites cannot, because they seed child
   tables (`tenant_settings`, `clients`, …) directly rather than through the
@@ -914,17 +915,93 @@ bootstrap; a nonce-based policy remains the target and is not claimed as done.
 
 **Still not production-ready, stated plainly:**
 
-* **Login cannot work under real RLS** (§17.0i). It resolves a user by email
-  before a tenant is known, which the policies forbid. This is the largest gap
-  and it needs an architecture decision, not a patch.
+* ~~**Login cannot work under real RLS** (§17.0i).~~ **CLOSED — see §17.0k.**
 * **Docker has never been executed.** Compose and both Dockerfiles are validated
-  by inspection and YAML parsing only.
+  by inspection and YAML parsing only. (The *deployment shape* they describe is
+  now executed for real by `scripts/production-smoke.sh`; only the image build
+  itself is unverified.)
 * **The i18n/RTL story is unchanged (H4/I18N-1..5).** The app is Arabic-first in
   its copy but hardcodes `dir="ltr"` in the root layout and has no locale
   routing, so a genuinely Arabic UI is not delivered yet.
 * **474 ESLint errors remain**, as a tracked, non-blocking backlog.
 * **`xlsx` advisory remains** (no patched release exists); the remedy is to move
   export server-side.
+
+### 17.0k RLS in the deployed shape (DONE — blockers closed)
+
+The §17.0i/§17.0j passes left one claim standing: that the application could not
+work under real Row-Level Security. This pass closes it, and in doing so found
+that the gap was much larger than login.
+
+**What was actually wrong was structural, not a missing query.** Three separate
+faults, each invisible to a green test suite:
+
+1. **The deployment connected as a superuser**, so RLS was decorative. Compose
+   used one `POSTGRES_USER` for everything, and `MIGRATION_DATABASE_URL` was
+   parsed in `env.ts` but never used — `getTxClient()` returned the app
+   connection, so migrations (and their `SECURITY DEFINER` functions) were owned
+   by whoever the API connects as.
+2. **The `SECURITY DEFINER` helpers were owned by a role that RLS applies to.**
+   Even with the split correctly configured, `erp_owner` as a plain
+   `NOSUPERUSER` role still sees nothing through FORCE RLS. Login broke with the
+   functions present, granted and owned exactly as intended. The migration role
+   must be a superuser or `BYPASSRLS`; `assertPreTenantFunctionsUsable()` now
+   checks that at boot and names the `ALTER ROLE … BYPASSRLS` remedy, because the
+   failure mode is a silent 401 on every login.
+3. **`SECURITY DEFINER` *can* escape FORCE RLS** — the opposite of what §17.0i
+   recorded. It cannot when the definer is the database owner (FORCE applies to
+   owners too), which is what the original probe tested. Owned by a `BYPASSRLS`
+   role it works. The earlier conclusion was an artefact of the probe's role.
+
+**Four product defects followed from those, all found only by running the API as
+a non-superuser:**
+
+* **Login.** Resolves an email with no tenant known. Now: a definer helper returns
+  `(user_id, tenant_id)` only, and the row (password hash included) is re-read
+  inside `runTenant(tenantId, …)` where the policies apply. Refresh and password
+  reset work the same way, keyed by token hash. Migration `0019` adds them;
+  nothing is returned that a caller could enumerate with.
+* **The auth guard.** It read `users` *before* the tenant interceptor runs (guards
+  precede interceptors in Nest), so on the application role it found no user and
+  **every authenticated endpoint answered 401**. This was the largest of the four
+  and no test touched it, because the test connection bypasses RLS.
+* **The outbox worker and the housekeeping batch.** Both are cross-tenant. Under
+  RLS the claim query matched nothing: no email would ever be delivered and
+  maintenance would report zero work forever. The platform-admin console had the
+  same problem. All three now run on the privileged connection through
+  `runPrivileged()`, which `getDb()` honours *below* the tenant scope so a tenant
+  request can never silently escalate.
+* **Seeding.** It creates tenants and users, which is cross-tenant bootstrap work;
+  with the split configured it failed on the first INSERT. Now privileged too.
+
+Two subtler bugs surfaced while testing the fixes, both recorded because they are
+easy to reproduce: capturing `getDb()` **outside** a `runTenant` callback queries
+the unscoped handle (zero rows, and a self-deadlock on the embedded driver), and
+`audit()` opening a nested transaction inside a tenant scope commits the caller's
+transaction early. Both are fixed at the call sites, and `runAppRole()` binds its
+handle the same way `runScoped()` does.
+
+**Deployment changes that ship with this:** `docker/db-init/00-app-role.sh`
+creates `erp_app` as `LOGIN NOSUPERUSER NOBYPASSRLS` (idempotent, re-asserted on
+every boot); compose points `DATABASE_URL` at it and `MIGRATION_DATABASE_URL` at
+the owner; `.env.production.example` documents the split.
+
+**The regression test is the point.** `scripts/production-smoke.sh` (new CI job
+"API — production shape") creates two roles, migrates as the owner, connects the
+API as the application role, and asserts registration, login, five authenticated
+endpoints, a write, refresh rotation, cross-tenant isolation, password reset,
+maintenance and the admin console. It also asserts the **boot log says RLS is
+enforced** and that maintenance actually did work — a run filtered by RLS would
+report zero. `auth-rls.e2e.test.ts` adds the in-suite version, starting with the
+control assertion that the `users` table is genuinely empty to the application
+role.
+
+Verified against PostgreSQL 16.2 in the exact production shape: 427/427 tests
+pass, and the smoke test passes from a clean database.
+
+**Still open:** the full suite still connects as a superuser (fixtures rewrite);
+Docker images are still only statically validated; i18n/RTL, the ESLint backlog
+and the `xlsx` advisory are unchanged.
 
 ### 17.1 Agreed sequencing for the next sprints
 
@@ -973,8 +1050,8 @@ Fixed with the product owner on 2026-11-15:
    Running the *whole* suite that way is still not possible: most fixtures seed
    child tables directly instead of going through the application, and those
    inserts are correctly refused by the policies. Closing it needs the fixtures
-   rewritten to enter a tenant scope, and **login needs an architecture decision
-   first** — it resolves a user by email before a tenant is known, which RLS
-   forbids. Until then `rls.e2e.test.ts` covers the policies by switching to
-   `erp_app` explicitly, with negative checks proving the assertions fail when a
-   policy is dropped.
+   rewritten to enter a tenant scope. The blocking half of this is now done: the
+   pre-tenant reads exist (§17.0k) and `auth-rls.e2e.test.ts` covers the login,
+   refresh and reset flows. Until the fixtures are rewritten, `rls.e2e.test.ts`
+   covers the policies by switching to `erp_app` explicitly, with negative checks
+   proving the assertions fail when a policy is dropped.
