@@ -137,6 +137,58 @@ jobs:
         run: npm test
 
   # ---------------------------------------------------------------------------
+  # Production shape: RLS actually enforced.
+  #
+  # The suites above connect as a SUPERUSER, which bypasses Row-Level Security
+  # even under FORCE. Every "unscoped read" bug is therefore invisible to them:
+  # login, the auth guard, the outbox worker and the admin console were all
+  # broken in a correctly configured deployment while 423/423 tests passed.
+  #
+  # This job runs the API the way production runs it — application role for
+  # traffic, owner role for migrations, FORCE RLS live — and exercises the paths
+  # a user actually hits. It is the regression test for that whole class.
+  # ---------------------------------------------------------------------------
+  api-production-shape:
+    name: API — production shape (RLS enforced)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Smoke test in the production shape
+        env:
+          ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: bash scripts/production-smoke.sh
+
+      - name: Upload the API log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-shape-api-log
+          path: /tmp/smoke-api.log
+
+  # ---------------------------------------------------------------------------
   # Web: typecheck -> build -> dependency audit
   # ---------------------------------------------------------------------------
   web:

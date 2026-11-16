@@ -8,7 +8,7 @@ import { AppModule } from "./app.module";
 import { env, isProd } from "./config/env";
 import { ensureBaselinePlans } from "./db/bootstrap";
 import { assertArabicSearchWorks } from "./db/guards";
-import { assertRlsEffective, closeDb, initDb } from "./db/client";
+import { assertPreTenantFunctionsUsable, assertRlsEffective, closeDb, initDb } from "./db/client";
 import { migrate } from "./db/migrate";
 import { ApiExceptionFilter } from "./shared/exception.filter";
 import { TenantScopeInterceptor } from "./shared/security/tenant-scope.interceptor";
@@ -67,6 +67,21 @@ async function bootstrap() {
     );
   } else {
     Logger.log(`[security] ${rls.reason}`, "Bootstrap");
+  }
+
+  // The pre-tenant lookups (login, refresh, password reset, public invoice
+  // token) are SECURITY DEFINER functions. They only see rows past FORCE RLS if
+  // the role that OWNS them bypasses RLS — otherwise every login fails with 401
+  // and nothing else looks wrong. The migration role is therefore required to be
+  // a superuser or BYPASSRLS; asserted here because the mistake is silent.
+  {
+    const preTenant = await assertPreTenantFunctionsUsable().catch((error: unknown) => ({
+      usable: false,
+      reason: `check failed: ${error instanceof Error ? error.message : String(error)}`,
+    }));
+    if (!preTenant.usable) {
+      Logger.warn(`[security] Pre-tenant auth lookups may fail: ${preTenant.reason}`, "Bootstrap");
+    }
   }
 
   // Arabic search correctness, checked at boot rather than discovered by users.
