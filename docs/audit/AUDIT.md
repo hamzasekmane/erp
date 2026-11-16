@@ -920,9 +920,23 @@ bootstrap; a nonce-based policy remains the target and is not claimed as done.
   by inspection and YAML parsing only. (The *deployment shape* they describe is
   now executed for real by `scripts/production-smoke.sh`; only the image build
   itself is unverified.)
-* **The i18n/RTL story is unchanged (H4/I18N-1..5).** The app is Arabic-first in
-  its copy but hardcodes `dir="ltr"` in the root layout and has no locale
-  routing, so a genuinely Arabic UI is not delivered yet.
+* **The i18n/RTL story is a product decision, not a bug (H4/I18N-1..5).** The
+  copy is **mixed**: of the 248 `.tsx` files, 42 have more Arabic than Latin text
+  and 17 of those are pages; the other 182 are French/Latin-dominant. The root
+  layout hardcodes `dir="ltr"` and six files re-assert it locally
+  (`(auth)/login`, `(auth)/register`, `ClientForm`, `Sidebar`,
+  `dashboard/layout`), which is therefore **correct today** — adding `dir="rtl"`
+  without moving that copy to Arabic first would reverse layouts around French
+  text, i.e. worse than the status quo.
+
+  So the sequence is fixed text first, direction second: the Arabic-dominant
+  screens (dashboard, analytics, categories, client groups/notes, invoice and
+  payment creation, reports, tenant settings, inscription) have to own their
+  direction individually, and the root layout can only flip once the remaining
+  copy has been translated. A `dir` helper that defaults to `rtl` for an unknown
+  locale was written and discarded: the default is not decided yet, and both
+  defaults are wrong for half the app. Recorded here so the next pass does not
+  re-derive it.
 * **474 ESLint errors remain**, as a tracked, non-blocking backlog.
 * **`xlsx` advisory remains** (no patched release exists); the remedy is to move
   export server-side.
