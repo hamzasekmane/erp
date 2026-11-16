@@ -6,12 +6,18 @@ services:
     # added in PostgreSQL 13, and it needs UTF8 server encoding.
     image: postgres:16-alpine
     restart: unless-stopped
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Creates the API's login role on first start (see the script's header).
+      # Without it the only available credential is the superuser, and RLS is
+      # inert: every policy is satisfied because the owner bypasses it.
+      - ./server/docker/db-init:/docker-entrypoint-initdb.d:ro
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-erp}
       POSTGRES_USER: ${POSTGRES_USER:-erp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-    volumes:
-      - db-data:/var/lib/postgresql/data
+      ERP_APP_ROLE: ${ERP_APP_ROLE:-erp_app}
+      ERP_APP_PASSWORD: ${ERP_APP_PASSWORD:?ERP_APP_PASSWORD is required (password of the API database role)}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp}"]
       interval: 10s
@@ -35,7 +41,12 @@ services:
         required: false
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-erp}
+      # The API connects as the NON-superuser role so RLS actually applies.
+      DATABASE_URL: postgres://${ERP_APP_ROLE:-erp_app}:${ERP_APP_PASSWORD}@db:5432/${POSTGRES_DB:-erp}
+      # Migrations (and the SECURITY DEFINER helpers they create) run as the
+      # owner: the helpers must be owned by a privileged role to see through
+      # FORCE RLS, while the API role must not have that privilege.
+      MIGRATION_DATABASE_URL: postgres://${POSTGRES_USER:-erp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-erp}
       PORT: 4000
       TRUST_PROXY: "true"
       TRUST_PROXY_HOPS: 1
