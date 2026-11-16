@@ -7,6 +7,7 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { env, isProd } from "./config/env";
 import { ensureBaselinePlans } from "./db/bootstrap";
+import { assertArabicSearchWorks } from "./db/guards";
 import { assertRlsEffective, closeDb, initDb } from "./db/client";
 import { migrate } from "./db/migrate";
 import { ApiExceptionFilter } from "./shared/exception.filter";
@@ -66,6 +67,33 @@ async function bootstrap() {
     );
   } else {
     Logger.log(`[security] ${rls.reason}`, "Bootstrap");
+  }
+
+  // Arabic search correctness, checked at boot rather than discovered by users.
+  //
+  // pg_trgm builds trigrams from WORD characters, and it decides what a word
+  // character is via the database's ctype. In a database created with the `C`
+  // collation it falls back to isalnum() on the raw UTF-8 bytes, so every Arabic
+  // letter is classified as a separator: `show_trgm('دراجة')` is EMPTY and
+  // `similarity()` always returns 0. The failure is silent — no error, no empty
+  // index, just search that never matches — which is why it is asserted here.
+  //
+  // Reproduced on PostgreSQL 16.2: the same build and the same extension give
+  // 0.529 for ('دراجة هوائية', 'دراجه هوائيه') on a C.UTF-8 database and 0 on a
+  // C one.
+  const arabicSearch = await assertArabicSearchWorks().catch((error: unknown) => ({
+    ok: false,
+    reason: `check failed: ${error instanceof Error ? error.message : String(error)}`,
+  }));
+  if (!arabicSearch.ok) {
+    Logger.warn(
+      `[search] Arabic search will return no results: ${arabicSearch.reason}. ` +
+        "Create the database with LC_COLLATE/LC_CTYPE = C.UTF-8 (or a UTF-8 locale) " +
+        "and re-run migrations.",
+      "Bootstrap",
+    );
+  } else {
+    Logger.log(`[search] ${arabicSearch.reason}`, "Bootstrap");
   }
 
   await app.listen(env.PORT, "0.0.0.0");
