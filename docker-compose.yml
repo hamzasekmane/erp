@@ -41,6 +41,17 @@ services:
       TRUST_PROXY_HOPS: 1
       UPLOAD_DIR: /app/uploads
       MAIL_OUTBOX_DIR: /app/.data/mail
+      # The API refuses to start in production without explicit CORS origins
+      # (env.ts rejects "*" and an empty value). Compose previously passed
+      # neither, so the container could only be started if the operator happened
+      # to also set it in .env.production — the default path failed at boot.
+      # The web app proxies /api same-origin, so the only origin needed is the
+      # public URL users visit.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Trust the reverse proxy's X-Forwarded-* headers; without this the audit
+      # log records the proxy's IP for every request.
+      TRUST_PROXY: "true"
+      TRUST_PROXY_HOPS: 1
     ports:
       - "4000:4000"
     volumes:
