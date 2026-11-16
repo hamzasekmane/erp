@@ -43,7 +43,7 @@ export default function TemplatesPage() {
             Modèles<span className="text-[var(--accent)]">.</span>
           </h1>
           <p className="text-[var(--foreground-muted)] text-xs font-black uppercase tracking-[0.3em] italic opacity-70">
-            Personnalisez l'apparence de vos documents
+            Personnalisez l&apos;apparence de vos documents
           </p>
         </div>
 
@@ -100,7 +100,7 @@ export default function TemplatesPage() {
              </div>
              <div>
                <p className="font-black uppercase text-[10px] tracking-widest text-[var(--foreground-muted)]">Sur mesure</p>
-               <h4 className="text-lg font-bold text-[var(--foreground)]">Besoin d'un design unique ?</h4>
+               <h4 className="text-lg font-bold text-[var(--foreground)]">Besoin d&apos;un design unique ?</h4>
              </div>
              <Link href="/contact" className="text-[var(--accent)] font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:gap-4 transition-all">
                Contactez-nous <ArrowRight size={14} />

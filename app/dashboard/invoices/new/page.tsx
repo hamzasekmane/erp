@@ -294,7 +294,7 @@ export default async function NewInvoicePage() {
                         <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                           <p className="text-[10px] font-black text-amber-400 uppercase flex items-center gap-2">
                             <AlertCircle size={12} />
-                            Aucun client trouvé - Créez d'abord un client
+                            Aucun client trouvé - Créez d&apos;abord un client
                           </p>
                         </div>
                       )}

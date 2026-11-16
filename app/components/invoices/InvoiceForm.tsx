@@ -588,7 +588,7 @@ export default function InvoiceForm({ clients, products, token, initialData }: I
         {isDateInvalid && (
           <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[8px] font-bold text-rose-400 uppercase flex items-center gap-2">
             <AlertCircle size={12} />
-            La date d'échéance doit être postérieure à la date d'émission
+            La date d&apos;échéance doit être postérieure à la date d&apos;émission
           </div>
         )}
       </div>

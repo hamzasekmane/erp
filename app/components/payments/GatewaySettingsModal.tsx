@@ -106,7 +106,7 @@ export default function GatewaySettingsModal({ gateway, token, onClose }: ModalP
         
         <div className="bg-zinc-50 dark:bg-zinc-900/50 p-6 text-center">
           <p className="text-[9px] text-zinc-400 font-bold uppercase italic tracking-tighter">
-            Ces clés sont chiffrées de bout en bout avant d'être stockées.
+            Ces clés sont chiffrées de bout en bout avant d&apos;être stockées.
           </p>
         </div>
       </div>

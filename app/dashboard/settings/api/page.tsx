@@ -209,7 +209,7 @@ export default function ApiSettingsPage() {
             Vos clés API
           </h3>
           <p className="text-xs text-[var(--foreground-muted)] mt-1">
-            Gérez et configurez vos clés d'accès à l'API
+            Gérez et configurez vos clés d&apos;accès à l&apos;API
           </p>
         </div>
         
@@ -338,8 +338,8 @@ export default function ApiSettingsPage() {
           <div>
             <p className="text-sm font-medium text-amber-500">Sécurité des clés API</p>
             <p className="text-xs text-[var(--foreground-muted)]">
-              Ne partagez jamais vos clés API. Pour des raisons de sécurité, les clés ne sont affichées qu'une seule fois lors de la création.
-              Utilisez des variables d'environnement pour stocker vos clés dans vos applications.
+              Ne partagez jamais vos clés API. Pour des raisons de sécurité, les clés ne sont affichées qu&apos;une seule fois lors de la création.
+              Utilisez des variables d&apos;environnement pour stocker vos clés dans vos applications.
             </p>
           </div>
         </div>

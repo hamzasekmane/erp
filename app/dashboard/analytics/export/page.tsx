@@ -194,7 +194,7 @@ export default function DataExportPage() {
 
             {/* Format Selection */}
             <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl p-6">
-              <h3 className="text-lg font-black mb-4">2. Choisissez le format d'export</h3>
+              <h3 className="text-lg font-black mb-4">2. Choisissez le format d&apos;export</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {exportFormats.map((format) => {
                   const Icon = format.icon;
@@ -219,7 +219,7 @@ export default function DataExportPage() {
 
             {/* Options */}
             <div className="bg-[var(--card-bg)] border border-[var(--border)] rounded-2xl p-6">
-              <h3 className="text-lg font-black mb-4">3. Options d'export</h3>
+              <h3 className="text-lg font-black mb-4">3. Options d&apos;export</h3>
               
               <div className="space-y-4">
                 <div>
@@ -229,7 +229,7 @@ export default function DataExportPage() {
                     onChange={(e) => setDateRange(e.target.value)}
                     className="w-full px-4 py-2 bg-[var(--background)] border border-[var(--border)] rounded-xl focus:outline-none focus:border-green-500/50"
                   >
-                    <option value="today">Aujourd'hui</option>
+                    <option value="today">Aujourd&apos;hui</option>
                     <option value="yesterday">Hier</option>
                     <option value="last7days">7 derniers jours</option>
                     <option value="last30days">30 derniers jours</option>
@@ -242,7 +242,7 @@ export default function DataExportPage() {
                 <label className="flex items-center justify-between cursor-pointer">
                   <div>
                     <p className="text-sm font-medium">Inclure les graphiques</p>
-                    <p className="text-[10px] text-[var(--foreground-muted)]">Ajouter des visualisations dans l'export</p>
+                    <p className="text-[10px] text-[var(--foreground-muted)]">Ajouter des visualisations dans l&apos;export</p>
                   </div>
                   <input
                     type="checkbox"

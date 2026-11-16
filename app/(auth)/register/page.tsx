@@ -74,7 +74,7 @@ export default function RegisterPage() {
             {[...Array(5)].map((_, i) => <Star key={i} size={12} fill="#3b82f6" className="text-blue-500" />)}
           </div>
           <p className="text-zinc-300 text-lg leading-relaxed italic font-medium tracking-tight">
-            "Une interface d'une clarté redoutable. Velora a réduit nos temps de gestion de 40% dès le premier mois."
+            &quot;Une interface d&apos;une clarté redoutable. Velora a réduit nos temps de gestion de 40% dès le premier mois.&quot;
           </p>
           <div className="mt-6 flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-cyan-500 rounded-2xl flex items-center justify-center font-black text-white text-xs shadow-lg">HS</div>

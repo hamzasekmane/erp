@@ -323,7 +323,7 @@ export default function ImportForm({ token }: ImportFormProps) {
 
       {/* ===== SECTION CONFIGURATION ===== */}
       <div className="bg-gradient-to-br from-white/5 to-white/0 backdrop-blur-md border border-white/10 rounded-3xl p-8">
-        <h2 className="text-xl font-black text-white mb-6">2. Options d'importation</h2>
+        <h2 className="text-xl font-black text-white mb-6">2. Options d&apos;importation</h2>
         
         <div className="space-y-4">
           {/* Option: Mise à jour des existants */}

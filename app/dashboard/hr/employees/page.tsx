@@ -451,7 +451,7 @@ export default function EmployeesPage() {
                 <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
                   <Trash2 className="text-red-500" size={24} />
                 </div>
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Supprimer l'employé</h2>
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Supprimer l&apos;employé</h2>
                 <p className="text-zinc-500 text-sm mb-6">
                   Êtes-vous sûr de vouloir supprimer <strong>{selectedEmployee.firstName} {selectedEmployee.lastName}</strong> ?
                   Cette action est irréversible.

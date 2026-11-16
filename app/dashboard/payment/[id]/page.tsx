@@ -101,7 +101,7 @@ export default async function PaymentDetailsPage({ params }: { params: Promise<{
                   Note interne
                 </p>
                 <p className="text-sm text-[var(--foreground)] italic">
-                  "{payment.notes}"
+                  &quot;{payment.notes}&quot;
                 </p>
               </div>
             )}

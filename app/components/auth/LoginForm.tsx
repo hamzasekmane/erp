@@ -66,7 +66,7 @@ export default function LoginForm() {
             required
           />
           <p className="text-[9px] text-zinc-600 leading-relaxed px-1">
-            Ouvrez votre application d'authentification (Google Authenticator, Authy, 1Password) et saisissez le
+            Ouvrez votre application d&apos;authentification (Google Authenticator, Authy, 1Password) et saisissez le
             code courant. Le ticket de vérification expire après 5 minutes.
           </p>
         </div>

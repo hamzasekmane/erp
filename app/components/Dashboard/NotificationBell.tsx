@@ -577,7 +577,7 @@ export default function NotificationBell({
               </span>
             </div>
             <p className="text-[6px] text-[var(--foreground-muted)]/40 mt-1 font-mono">
-              Velora ERP • Gestion d'entreprise intelligente • v2.0.0
+              Velora ERP • Gestion d&apos;entreprise intelligente • v2.0.0
             </p>
           </a>
         </div>

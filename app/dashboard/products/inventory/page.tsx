@@ -73,7 +73,7 @@ export default async function InventoryPage({ searchParams }: PageProps) {
             </div>
             <div className="bg-zinc-900 dark:bg-zinc-100 p-8 rounded-[2.5rem] text-white dark:text-zinc-900 shadow-2xl">
                <h3 className="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-2">Audit de Flux</h3>
-               <p className="text-[11px] opacity-70">Dernière mise à jour effectuée aujourd'hui à 08:00</p>
+               <p className="text-[11px] opacity-70">Dernière mise à jour effectuée aujourd&apos;hui à 08:00</p>
             </div>
           </div>
         </div>

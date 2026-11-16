@@ -113,7 +113,7 @@ const { currentUsers, usedStorageGB, currentMonthInvoices } = currentUsage;
               </a>
               <form action="/api/subscriptions/cancel" method="POST">
                 <button type="submit" className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border)] rounded-xl text-sm font-medium hover:bg-[var(--accent)]/10 transition-colors">
-                  Annuler l'abonnement
+                  Annuler l&apos;abonnement
                 </button>
               </form>
             </div>
@@ -184,7 +184,7 @@ const { currentUsers, usedStorageGB, currentMonthInvoices } = currentUsage;
               <span className="text-sm font-black">+49€/mois</span>
             </div>
             <p className="text-sm font-black mb-1">Stockage supplémentaire</p>
-            <p className="text-[10px] text-[var(--foreground-muted)]">+100 Go d'espace de stockage</p>
+            <p className="text-[10px] text-[var(--foreground-muted)]">+100 Go d&apos;espace de stockage</p>
             <button className="w-full mt-3 py-1.5 text-xs bg-[var(--accent)]/10 rounded-lg hover:bg-[var(--accent)]/20 transition-colors">Ajouter</button>
           </div>
           <div className="p-4 border border-[var(--border)] rounded-xl hover:border-[var(--accent)]/50 transition-all">

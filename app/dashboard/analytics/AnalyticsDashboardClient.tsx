@@ -702,7 +702,7 @@ export default function AnalyticsDashboardClient({
             </div>
             <h3 className="text-lg font-black mb-2">Prévisions</h3>
             <p className="text-sm text-[var(--foreground-muted)]">
-              Prédictions basées sur l'IA et analyses avancées
+              Prédictions basées sur l&apos;IA et analyses avancées
             </p>
           </Link>
 

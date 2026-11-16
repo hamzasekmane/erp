@@ -141,7 +141,7 @@ export function TenantSettings({ tenant, token }: TenantSettingsProps) {
               Paramètres du tenant
             </h2>
             <p className="text-[9px] text-[var(--foreground-muted)] font-mono">
-              Configuration avancée de l'organisation
+              Configuration avancée de l&apos;organisation
             </p>
           </div>
         </div>
@@ -172,7 +172,7 @@ export function TenantSettings({ tenant, token }: TenantSettingsProps) {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Nom de l'organisation</label>
+                <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Nom de l&apos;organisation</label>
                 <input
                   type="text"
                   value={settings.general.name}
@@ -304,7 +304,7 @@ export function TenantSettings({ tenant, token }: TenantSettingsProps) {
               <div className="flex items-center justify-between p-4 bg-[var(--background)]/50 rounded-xl">
                 <div>
                   <p className="text-sm font-black text-[var(--foreground)]">Authentification à deux facteurs</p>
-                  <p className="text-[9px] text-[var(--foreground-muted)]">Sécurisez l'accès avec 2FA</p>
+                  <p className="text-[9px] text-[var(--foreground-muted)]">Sécurisez l&apos;accès avec 2FA</p>
                 </div>
                 <button
                   type="button"
@@ -320,7 +320,7 @@ export function TenantSettings({ tenant, token }: TenantSettingsProps) {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Délai d'inactivité (minutes)</label>
+                <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Délai d&apos;inactivité (minutes)</label>
                 <input
                   type="number"
                   value={settings.security.sessionTimeout}

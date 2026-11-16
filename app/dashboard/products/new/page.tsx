@@ -180,7 +180,7 @@ export default async function NewProductPage() {
               className="inline-flex items-center gap-2 text-[var(--foreground-muted)] hover:text-[var(--accent)] font-black uppercase text-[10px] tracking-[0.2em] transition-all group"
             >
               <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> 
-              Retour à l'inventaire
+              Retour à l&apos;inventaire
             </Link>
             <div className="flex items-center gap-4">
               <div className="p-4 bg-[var(--accent)] rounded-2xl text-white shadow-xl shadow-[var(--accent)]/20 rotate-3 transition-transform hover:rotate-0">
@@ -191,7 +191,7 @@ export default async function NewProductPage() {
                   Nouveau <span className="text-[var(--accent)]">Produit</span>
                 </h1>
                 <p className="text-[var(--foreground-muted)] font-bold text-[10px] uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
-                  <Sparkles size={12} className="text-amber-500 animate-pulse" /> Enregistrement d'un nouvel article
+                  <Sparkles size={12} className="text-amber-500 animate-pulse" /> Enregistrement d&apos;un nouvel article
                 </p>
               </div>
             </div>
@@ -208,7 +208,7 @@ export default async function NewProductPage() {
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
             <p className="text-[9px] font-black text-amber-400 uppercase flex items-center gap-2">
               <AlertCircle size={12} />
-              Aucune catégorie trouvée - Créez d'abord une catégorie
+              Aucune catégorie trouvée - Créez d&apos;abord une catégorie
             </p>
           </div>
         )}
@@ -217,7 +217,7 @@ export default async function NewProductPage() {
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
             <p className="text-[9px] font-black text-amber-400 uppercase flex items-center gap-2">
               <AlertCircle size={12} />
-              Aucune taxe trouvée - Configurez d'abord les taxes
+              Aucune taxe trouvée - Configurez d&apos;abord les taxes
             </p>
           </div>
         )}

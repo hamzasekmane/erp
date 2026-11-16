@@ -124,7 +124,7 @@ export default function SmsSettingsPage() {
                 Configuration SMS
               </h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Gérez l'envoi de SMS pour les notifications et rappels
+                Gérez l&apos;envoi de SMS pour les notifications et rappels
               </p>
             </div>
           </div>
@@ -137,7 +137,7 @@ export default function SmsSettingsPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl font-medium text-sm hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <TestTube size={16} />}
-            Tester l'envoi
+            Tester l&apos;envoi
           </button>
           <button
             onClick={handleSave}
@@ -293,7 +293,7 @@ export default function SmsSettingsPage() {
                   )}
 
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Numéro d'expéditeur</label>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Numéro d&apos;expéditeur</label>
                     <div className="flex gap-2">
                       <span className="flex items-center px-3 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-sm">+213</span>
                       <input
@@ -316,7 +316,7 @@ export default function SmsSettingsPage() {
                 <div className="p-5 border-b border-zinc-200 dark:border-zinc-800">
                   <div className="flex items-center gap-2">
                     <TestTube size={18} className="text-green-500" />
-                    <h3 className="font-bold text-zinc-900 dark:text-white">Test d'envoi</h3>
+                    <h3 className="font-bold text-zinc-900 dark:text-white">Test d&apos;envoi</h3>
                   </div>
                 </div>
                 <div className="p-5 space-y-4">
@@ -476,7 +476,7 @@ export default function SmsSettingsPage() {
       <div className="bg-zinc-100 dark:bg-zinc-800/50 rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <Shield size={14} className="text-zinc-500" />
-          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Variables d'environnement</h4>
+          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Variables d&apos;environnement</h4>
         </div>
         <div className="space-y-2">
           <code className="block text-[10px] font-mono text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-950 p-2 rounded-lg">

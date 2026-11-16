@@ -242,7 +242,7 @@ export default async function ClientDetailsPage({ params }: { params: Promise<{ 
                 Aucune transaction
               </p>
               <p className="text-[10px] text-[var(--foreground-muted)]/60 max-w-md">
-                Ce client n'a pas encore de factures. Créez une nouvelle facture pour commencer.
+                Ce client n&apos;a pas encore de factures. Créez une nouvelle facture pour commencer.
               </p>
               <Link
                 href={`/dashboard/invoices/new?clientId=${id}`}

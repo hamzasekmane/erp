@@ -199,7 +199,7 @@ export default function AttendancePage() {
                   Gestion des présences
                 </h1>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Suivi des heures d'arrivée et de départ
+                  Suivi des heures d&apos;arrivée et de départ
                 </p>
               </div>
             </div>

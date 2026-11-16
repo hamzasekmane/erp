@@ -91,7 +91,7 @@ export default async function EditClientNotePage({ params }: Props) {
           <span className="text-amber-400 ml-2">•</span>
         </h1>
         <p className="text-zinc-400 text-sm mt-2">
-          Vous modifiez la note <span className="text-amber-400 font-bold">"{note.title}"</span>
+          Vous modifiez la note <span className="text-amber-400 font-bold">&quot;{note.title}&quot;</span>
         </p>
       </div>
 
@@ -141,8 +141,8 @@ export default async function EditClientNotePage({ params }: Props) {
       <div className="bg-gradient-to-br from-amber-500/10 to-transparent backdrop-blur-sm border border-amber-500/30 rounded-2xl p-5 flex items-start gap-4">
         <AlertCircle size={20} className="text-amber-400 flex-shrink-0" />
         <p className="text-[10px] text-zinc-400 leading-relaxed">
-          La modification d'une note mettra à jour son contenu et sa date de modification. 
-          L'historique des versions n'est pas conservé.
+          La modification d&apos;une note mettra à jour son contenu et sa date de modification. 
+          L&apos;historique des versions n&apos;est pas conservé.
         </p>
       </div>
     </div>

@@ -160,7 +160,7 @@ export function CompanyClient({ initialCompany, token }: CompanyClientProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider flex items-center gap-2">
-                    <Building2 size={12} /> Nom de l'entreprise *
+                    <Building2 size={12} /> Nom de l&apos;entreprise *
                   </label>
                   <input
                     type="text"
@@ -226,7 +226,7 @@ export function CompanyClient({ initialCompany, token }: CompanyClientProps) {
                 {/* Logo Upload */}
                 <div className="space-y-2 md:col-span-2">
                   <label className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider flex items-center gap-2">
-                    <Image size={12} /> Logo de l'entreprise
+                    <Image size={12} /> Logo de l&apos;entreprise
                   </label>
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 bg-gradient-to-br from-[var(--accent)]/20 to-[var(--accent)]/5 rounded-xl flex items-center justify-center border-2 border-[var(--border)]">

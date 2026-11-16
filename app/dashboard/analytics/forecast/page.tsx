@@ -161,7 +161,7 @@ export default function ForecastPage() {
                   Prévisions & <span className="text-blue-500">Tendances</span>
                 </h1>
                 <p className="text-xs text-[var(--foreground-muted)] font-mono">
-                  Prédictions basées sur l'IA et analyses avancées
+                  Prédictions basées sur l&apos;IA et analyses avancées
                 </p>
               </div>
             </div>
@@ -255,7 +255,7 @@ export default function ForecastPage() {
             <div>
               <h3 className="text-lg font-black flex items-center gap-2">
                 <ChartLine size={18} className="text-blue-500" />
-                Projection du chiffre d'affaires
+                Projection du chiffre d&apos;affaires
               </h3>
               <p className="text-xs text-[var(--foreground-muted)]">Prévisions avec intervalles de confiance</p>
             </div>
@@ -434,7 +434,7 @@ export default function ForecastPage() {
               <h3 className="text-lg font-black mb-2">Méthodologie de prévision</h3>
               <p className="text-sm text-[var(--foreground-muted)] mb-3">
                 Nos prévisions utilisent une combinaison de modèles SARIMA (Seasonal ARIMA) 
-                et d'algorithmes de Machine Learning pour analyser les tendances historiques, 
+                et d&apos;algorithmes de Machine Learning pour analyser les tendances historiques, 
                 les patterns saisonniers et les facteurs externes.
               </p>
               <div className="flex flex-wrap gap-3">

@@ -167,7 +167,7 @@ export default function NotificationsPage() {
         <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[9px] font-black text-zinc-500 uppercase">Notifications aujourd'hui</p>
+              <p className="text-[9px] font-black text-zinc-500 uppercase">Notifications aujourd&apos;hui</p>
               <p className="text-2xl font-black text-zinc-900 dark:text-white mt-1">24</p>
             </div>
             <Bell size={20} className="text-purple-500 opacity-50" />
@@ -185,7 +185,7 @@ export default function NotificationsPage() {
         <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[9px] font-black text-zinc-500 uppercase">Taux d'ouverture</p>
+              <p className="text-[9px] font-black text-zinc-500 uppercase">Taux d&apos;ouverture</p>
               <p className="text-2xl font-black text-amber-500 mt-1">78%</p>
             </div>
             <TrendingUp size={20} className="text-amber-500 opacity-50" />
@@ -414,7 +414,7 @@ export default function NotificationsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium">Rappel avant échéance</p>
-                    <p className="text-xs text-zinc-500">Envoyer un rappel avant la date d'échéance</p>
+                    <p className="text-xs text-zinc-500">Envoyer un rappel avant la date d&apos;échéance</p>
                   </div>
                   <select className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-sm">
                     <option>3 jours avant</option>
@@ -425,7 +425,7 @@ export default function NotificationsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium">Rappel après échéance</p>
-                    <p className="text-xs text-zinc-500">Envoyer un rappel après la date d'échéance</p>
+                    <p className="text-xs text-zinc-500">Envoyer un rappel après la date d&apos;échéance</p>
                   </div>
                   <select className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-sm">
                     <option>1 jour après</option>
@@ -493,7 +493,7 @@ export default function NotificationsPage() {
             </button>
           </div>
           <p className="text-[9px] text-zinc-500 mt-2">
-            Les webhooks seront appelés pour chaque notification avec un payload JSON contenant les détails de l'événement.
+            Les webhooks seront appelés pour chaque notification avec un payload JSON contenant les détails de l&apos;événement.
           </p>
         </div>
       )}

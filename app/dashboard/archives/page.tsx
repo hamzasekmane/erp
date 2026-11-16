@@ -247,7 +247,7 @@ export default async function ArchivesPage() {
                 <tr>
                   <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Type</th>
                   <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Nom</th>
-                  <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Date d'archivage</th>
+                  <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Date d&apos;archivage</th>
                   <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Statut</th>
                   <th className="text-left p-4 text-xs font-black uppercase tracking-wider">Action</th>
                 </tr>
@@ -284,10 +284,10 @@ export default async function ArchivesPage() {
           <div className="flex items-start gap-3">
             <Archive size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-blue-500">Politique d'archivage</p>
+              <p className="text-sm font-medium text-blue-500">Politique d&apos;archivage</p>
               <p className="text-xs text-[var(--foreground-muted)]">
                 Les données sont conservées pendant 365 jours dans les archives avant suppression définitive. 
-                Vous pouvez restaurer n'importe quel élément archivé à tout moment pendant cette période.
+                Vous pouvez restaurer n&apos;importe quel élément archivé à tout moment pendant cette période.
               </p>
             </div>
           </div>

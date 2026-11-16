@@ -659,7 +659,7 @@ export default function ClientsReportPage() {
               <div className="p-2 bg-purple-500/10 rounded-lg">
                 <Activity size={16} className="text-purple-500" />
               </div>
-              <span className="text-sm font-black">Taux d'engagement</span>
+              <span className="text-sm font-black">Taux d&apos;engagement</span>
             </div>
             <p className="text-2xl font-black">76%</p>
             <p className="text-[10px] text-[var(--foreground-muted)]">Utilisateurs actifs quotidiens</p>

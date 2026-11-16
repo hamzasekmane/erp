@@ -409,7 +409,7 @@ export default function NewEmployeePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Date d'embauche *</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Date d&apos;embauche *</label>
                 <input
                   type="date"
                   name="hireDate"
@@ -446,7 +446,7 @@ export default function NewEmployeePage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période d'essai (jours)</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période d&apos;essai (jours)</label>
                 <input
                   type="number"
                   name="probationPeriod"
@@ -576,7 +576,7 @@ export default function NewEmployeePage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Date d'expiration CIN</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Date d&apos;expiration CIN</label>
                 <input
                   type="date"
                   name="cinExpiry"
@@ -626,7 +626,7 @@ export default function NewEmployeePage() {
                 />
                 <div>
                   <span className="text-sm font-medium text-zinc-900 dark:text-white">Employé actif</span>
-                  <p className="text-xs text-zinc-500">L'employé peut se connecter et accéder au système</p>
+                  <p className="text-xs text-zinc-500">L&apos;employé peut se connecter et accéder au système</p>
                 </div>
               </label>
             </div>

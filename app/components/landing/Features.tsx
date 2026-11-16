@@ -99,13 +99,13 @@ export default function Features() {
             <span className="text-[10px] text-gray-600 font-bold uppercase tracking-[0.2em]">Ecosystem v2.0</span>
           </motion.div>
 <h2 className="md:text-4xl font-black tracking-tighter leading-none mb-9 text-gray-900">
-  L'ÉCOSYSTÈME{" "}
+  L&apos;ÉCOSYSTÈME{" "}
   <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-cyan-500 to-[#f43f5e] italic py-1">
     COMPLET
   </span>
 </h2>
           <p className="text-gray-500 text-xl max-w-2xl mx-auto font-medium">
-            Une suite d'outils interconnectés pour propulser votre entreprise vers la nouvelle ère digitale.
+            Une suite d&apos;outils interconnectés pour propulser votre entreprise vers la nouvelle ère digitale.
           </p>
         </div>
 
@@ -179,7 +179,7 @@ export default function Features() {
                 href="/register"
                 className="inline-block px-12 py-6 bg-white text-gray-950 rounded-full font-black uppercase text-sm tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-2xl"
               >
-                Commencer l'aventure
+                Commencer l&apos;aventure
               </Link>
             </div>
           </div>

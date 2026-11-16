@@ -122,7 +122,7 @@ export default async function CompanySettingsPage() {
                 </span>
               </div>
               <h1 className="text-3xl md:text-4xl font-black text-[var(--foreground)] tracking-tighter">
-                Paramètres de <span className="text-[var(--accent)]">l'entreprise</span>
+                Paramètres de <span className="text-[var(--accent)]">l&apos;entreprise</span>
               </h1>
               <p className="text-xs text-[var(--foreground-muted)] font-mono">
                 Gérez les informations et la configuration de votre organisation

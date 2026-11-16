@@ -159,7 +159,7 @@ export default function ContactSupportPage() {
                 <div className="pt-3 border-t border-[var(--border)]">
                   <div className="flex items-center gap-2 mb-2">
                     <Clock size={14} className="text-[var(--foreground-muted)]" />
-                    <span className="text-xs font-medium">Horaires d'ouverture</span>
+                    <span className="text-xs font-medium">Horaires d&apos;ouverture</span>
                   </div>
                   <p className="text-xs text-[var(--foreground-muted)]">
                     Lundi - Vendredi: 9h00 - 18h00<br />

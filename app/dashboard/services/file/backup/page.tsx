@@ -297,7 +297,7 @@ export default function BackupPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[9px] font-black text-zinc-500 uppercase">Dernière sauvegarde</p>
-              <p className="text-sm font-bold text-zinc-900 dark:text-white mt-1">Aujourd'hui 03:00</p>
+              <p className="text-sm font-bold text-zinc-900 dark:text-white mt-1">Aujourd&apos;hui 03:00</p>
             </div>
             <Clock size={20} className="text-amber-500 opacity-50" />
           </div>

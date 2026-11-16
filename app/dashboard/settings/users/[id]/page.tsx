@@ -318,7 +318,7 @@ export default async function UserDetailsPage({ params }: PageProps) {
                   )}
                   {user.role === 'manager' && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-black uppercase bg-blue-500/10 text-blue-500">
-                      Gestion d'équipe
+                      Gestion d&apos;équipe
                     </span>
                   )}
                 </div>
@@ -382,7 +382,7 @@ export default async function UserDetailsPage({ params }: PageProps) {
             </button>
             <button className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-[10px] font-black uppercase text-blue-500 hover:bg-blue-500 hover:text-white transition-all">
               <RefreshCw size={12} />
-              Journal d'activité
+              Journal d&apos;activité
             </button>
           </div>
         </div>

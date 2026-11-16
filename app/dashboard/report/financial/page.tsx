@@ -186,7 +186,7 @@ export default function FinancialReportPage() {
               </div>
               <span className="text-[8px] font-mono text-[var(--foreground-muted)]">KPI_01</span>
             </div>
-            <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Chiffre d'affaires</p>
+            <p className="text-[10px] font-black text-[var(--foreground-muted)] uppercase tracking-wider">Chiffre d&apos;affaires</p>
             <p className="text-2xl font-black text-emerald-500">{financialData.revenue.total.toLocaleString()}€</p>
             <div className="flex items-center gap-1">
               <TrendingUp size={12} className="text-emerald-500" />
@@ -445,7 +445,7 @@ export default function FinancialReportPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-emerald-500/5 rounded-xl">
                 <div>
-                  <p className="text-xs font-medium">Flux d'exploitation</p>
+                  <p className="text-xs font-medium">Flux d&apos;exploitation</p>
                   <p className="text-[9px] text-[var(--foreground-muted)]">Activités opérationnelles</p>
                 </div>
                 <p className="text-lg font-black text-emerald-500">+{financialData.cashFlow.operating.toLocaleString()}€</p>
@@ -453,7 +453,7 @@ export default function FinancialReportPage() {
               
               <div className="flex justify-between items-center p-3 bg-rose-500/5 rounded-xl">
                 <div>
-                  <p className="text-xs font-medium">Flux d'investissement</p>
+                  <p className="text-xs font-medium">Flux d&apos;investissement</p>
                   <p className="text-[9px] text-[var(--foreground-muted)]">Investissements</p>
                 </div>
                 <p className="text-lg font-black text-rose-500">{financialData.cashFlow.investing.toLocaleString()}€</p>

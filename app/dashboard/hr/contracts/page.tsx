@@ -454,7 +454,7 @@ export default function ContractsPage() {
                         </p>
                         {contract.probationEndDate && new Date(contract.probationEndDate) > new Date() && (
                           <p className="text-[9px] text-amber-500 mt-0.5">
-                            Période d'essai jusqu'au {formatDate(contract.probationEndDate)}
+                            Période d&apos;essai jusqu&apos;au {formatDate(contract.probationEndDate)}
                           </p>
                         )}
                       </div>
@@ -621,7 +621,7 @@ export default function ContractsPage() {
                   <input type="number" className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm" placeholder="0.00" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période d'essai (jours)</label>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Période d&apos;essai (jours)</label>
                   <input type="number" className="w-full p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm" placeholder="90" />
                 </div>
               </div>

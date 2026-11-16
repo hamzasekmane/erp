@@ -94,7 +94,7 @@ export default async function EditProductPage({
               </div>
 
               <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-800">
-                <p className="text-[10px] font-black text-zinc-400 uppercase mb-1 tracking-tighter">Seuil d'alerte</p>
+                <p className="text-[10px] font-black text-zinc-400 uppercase mb-1 tracking-tighter">Seuil d&apos;alerte</p>
                 <p className="font-bold text-sm text-rose-500 italic">{product.minStock} {product.unit}</p>
               </div>
             </div>

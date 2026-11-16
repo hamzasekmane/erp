@@ -315,7 +315,7 @@ export default function BenchmarkingPage() {
                   Benchmarking & <span className="text-amber-500">Performance</span>
                 </h1>
                 <p className="text-xs text-[var(--foreground-muted)] font-mono">
-                  Comparez vos performances aux standards de l'industrie
+                  Comparez vos performances aux standards de l&apos;industrie
                 </p>
               </div>
             </div>
@@ -365,7 +365,7 @@ export default function BenchmarkingPage() {
                 <Building2 size={24} className="text-amber-500" />
               </div>
               <div>
-                <p className="text-xs text-[var(--foreground-muted)]">Secteur d'activité</p>
+                <p className="text-xs text-[var(--foreground-muted)]">Secteur d&apos;activité</p>
                 <h3 className="text-2xl font-black">{industryData[selectedIndustry].name}</h3>
                 <p className="text-sm text-[var(--foreground-muted)]">{industryData[selectedIndustry].size}</p>
               </div>
@@ -567,7 +567,7 @@ export default function BenchmarkingPage() {
             <div>
               <h3 className="text-lg font-black mb-2">Recommandations stratégiques</h3>
               <p className="text-sm text-[var(--foreground-muted)] mb-4">
-                Basé sur l'analyse comparative, voici les actions prioritaires pour améliorer vos performances:
+                Basé sur l&apos;analyse comparative, voici les actions prioritaires pour améliorer vos performances:
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-500/5">

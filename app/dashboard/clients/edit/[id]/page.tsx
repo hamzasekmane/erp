@@ -108,7 +108,7 @@ export default async function EditClientPage({ params }: Props) {
             </h4>
             <p className="text-[10px] text-[var(--foreground-muted)] leading-relaxed">
               La modification du nom, du code ou du type de client apparaîtra immédiatement dans toutes les factures et rapports financiers associés. 
-              <span className="block mt-1 text-amber-400 font-bold">Vérifiez l'exactitude des données avant d'enregistrer.</span>
+              <span className="block mt-1 text-amber-400 font-bold">Vérifiez l&apos;exactitude des données avant d&apos;enregistrer.</span>
             </p>
           </div>
         </div>

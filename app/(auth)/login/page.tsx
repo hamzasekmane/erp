@@ -85,7 +85,7 @@ export default function LoginPage() {
             ))}
           </div>
           <p className="text-zinc-300 text-lg leading-relaxed italic font-medium tracking-tight">
-            "Simple, rapide et redoutable. Velora est l'outil central de notre transformation digitale."
+            &quot;Simple, rapide et redoutable. Velora est l&apos;outil central de notre transformation digitale.&quot;
           </p>
           <div className="mt-8 flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-cyan-500 rounded-2xl flex items-center justify-center font-black text-white text-xs shadow-xl">
@@ -118,7 +118,7 @@ export default function LoginPage() {
               Bon retour !
             </motion.h1>
             <p className="text-zinc-500 text-sm font-medium tracking-wide">
-              Identifiez-vous pour accéder à l'infrastructure de gestion.
+              Identifiez-vous pour accéder à l&apos;infrastructure de gestion.
             </p>
           </div>
 

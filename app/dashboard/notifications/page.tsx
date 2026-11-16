@@ -239,7 +239,7 @@ export default async function NotificationsPage() {
               </div>
               <div>
                 <span className="text-xs font-bold text-[var(--foreground)] uppercase tracking-tight">
-                  Flux d'événements
+                  Flux d&apos;événements
                 </span>
                 <p className="text-[9px] text-[var(--foreground-muted)] font-mono">
                   {notifications.length} notification{notifications.length > 1 ? 's' : ''} au total
@@ -291,7 +291,7 @@ export default async function NotificationsPage() {
       {/* Footer */}
       <div className="flex justify-between items-center pt-4 border-t border-[var(--border)]">
         <p className="text-[8px] font-mono text-[var(--foreground-muted)]">
-          Velora ERP • Gestion d'entreprise intelligente • v2.0.0
+          Velora ERP • Gestion d&apos;entreprise intelligente • v2.0.0
         </p>
         <div className="flex items-center gap-2">
           <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />

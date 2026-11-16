@@ -92,7 +92,7 @@ export default function PdfSettingsPage() {
                 Configuration PDF
               </h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Personnalisez l'apparence de vos documents PDF
+                Personnalisez l&apos;apparence de vos documents PDF
               </p>
             </div>
           </div>
@@ -125,8 +125,8 @@ export default function PdfSettingsPage() {
           <div>
             <h4 className="text-sm font-bold text-blue-500">Personnalisation avancée</h4>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-              Configurez l'apparence de vos factures, devis et autres documents PDF.
-              Les modifications s'appliquent à tous les documents générés.
+              Configurez l&apos;apparence de vos factures, devis et autres documents PDF.
+              Les modifications s&apos;appliquent à tous les documents générés.
             </p>
           </div>
         </div>
@@ -249,7 +249,7 @@ export default function PdfSettingsPage() {
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Logo de l'entreprise</label>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Logo de l&apos;entreprise</label>
                   <p className="text-[10px] text-zinc-400">Format recommandé: PNG, SVG, max 2MB</p>
                 </div>
                 <button
