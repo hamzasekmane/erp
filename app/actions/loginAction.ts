@@ -6,27 +6,32 @@ import { cookies } from "next/headers";
 
 type SessionPayload = {
   token?: string;
+  refreshToken?: string;
   tenant?: { id?: string };
   user?: { name?: string };
 };
 
 /**
- * Stores the session cookies once the API finally issued a token
- * (with or without the MFA step).
+ * Stores the session once the API finally issued a token (with or without the
+ * MFA step).
+ *
+ * Delegates to `storeSession` so the refresh token is kept and the access-token
+ * cookie expires when the token does. The previous version dropped the refresh
+ * token and gave the access token a 7-day cookie, so the app appeared signed in
+ * for a week while every API call failed after an hour.
  */
 async function persistSession(result: SessionPayload) {
+  const { storeSession } = await import("@/app/lib/session");
   const cookieStore = await cookies();
-  const isProd = process.env.NODE_ENV === "production";
-  const common = {
-    secure: isProd,
-    sameSite: "strict" as const,
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  };
-
-  cookieStore.set("token", result.token ?? "", { ...common, httpOnly: true });
-  if (result.tenant?.id) cookieStore.set("tenantId", result.tenant.id, common);
-  if (result.user?.name) cookieStore.set("user_name", result.user.name, common);
+  if (result.user?.name) {
+    cookieStore.set("user_name", result.user.name, {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict" as const,
+      maxAge: 60 * 60 * 24 * 30,
+      path: "/",
+    });
+  }
+  await storeSession(result);
 }
 
 export async function loginAction(prevState: any, formData: FormData) {

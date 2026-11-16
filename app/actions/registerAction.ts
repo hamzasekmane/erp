@@ -92,22 +92,11 @@ export async function registerAction(_prevState: any, formData: FormData) {
     }
 
     // Succès – stockage des cookies
-    const cookieStore = await cookies();
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict" as const,
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/"
-    };
-
-    cookieStore.set("token", responseData.token, cookieOptions);
-    if (responseData.user) {
-      cookieStore.set("user", JSON.stringify(responseData.user), { ...cookieOptions, httpOnly: false });
-    }
-    if (responseData.tenant) {
-      cookieStore.set("tenant", JSON.stringify(responseData.tenant), { ...cookieOptions, httpOnly: false });
-    }
+    // One place decides cookie lifetimes (see app/lib/session.ts): the access
+    // token's cookie must expire with the token, and the refresh token has to be
+    // kept or the session dies silently after an hour.
+    const { storeSession } = await import("@/app/lib/session");
+    await storeSession(responseData);
 
     return {
       success: true,
