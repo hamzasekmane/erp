@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { getDb } from "../../db/client";
+import { getDb, runPrivileged } from "../../db/client";
 import { invoiceStatusHistory, invoices, passwordResetTokens, sessions, subscriptions } from "../../db/schema";
 import { audit } from "../../shared/audit";
 import { newId } from "../../shared/ids";
@@ -23,7 +23,17 @@ export class MaintenanceService {
     return this.lastReport;
   }
 
+  /**
+   * Housekeeping across ALL tenants, therefore on the privileged connection.
+   * On the application role every statement here is filtered by RLS and the
+   * batch reports "nothing to do" forever: invoices never become overdue,
+   * expired subscriptions never lapse, dead sessions are never purged.
+   */
   async runAll(): Promise<MaintenanceReport> {
+    return runPrivileged(() => this.runAllUnsafe());
+  }
+
+  private async runAllUnsafe(): Promise<MaintenanceReport> {
     const startedAt = new Date();
     const [invoicesMarkedOverdue, subscriptionsExpired, sessionsPurged, resetTokensPurged] = [
       await this.markOverdueInvoices(),
