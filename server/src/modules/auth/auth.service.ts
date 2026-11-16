@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { getDb } from "../../db/client";
+import { runTenant, getDb } from "../../db/client";
 import {
   outboxEvents,
   passwordResetTokens,
@@ -13,6 +13,12 @@ import {
   users,
 } from "../../db/schema";
 import { audit } from "../../shared/audit";
+import {
+  resolveLoginScope,
+  resolveLoginScopeById,
+  resolvePasswordResetScope,
+  resolveRefreshScope,
+} from "../../db/identity-scope";
 import { LedgerSetupService } from "../ledger/ledger-setup.service";
 import { AppError } from "../../shared/errors";
 import { newId } from "../../shared/ids";
@@ -181,11 +187,16 @@ export class AuthService {
       ...meta,
     });
 
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).limit(1);
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-
-    return this.buildAuthResponse(user!, tenant!, settings ?? null, meta);
+    // The rows written above are re-read inside the new tenant's scope: the
+    // transaction has committed, and outside a scope the FORCE policies hide
+    // them (they belong to another tenant as far as the session is concerned).
+    return runTenant(tenantId, async () => {
+      const tx = getDb();
+      const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+      const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!tenant || !user) throw new Error("Registration committed but its rows are not readable");
+      return this.buildAuthResponse(user, tenant, meta);
+    });
   }
 
   /* ------------------------------------------------------------------ */
@@ -193,31 +204,44 @@ export class AuthService {
   /* ------------------------------------------------------------------ */
 
   async login(input: LoginInput, meta: Meta) {
-    const db = getDb();
     const email = input.email.trim().toLowerCase();
     const throttleKey = `login:${meta.ip ?? "unknown"}:${email}`;
     if (!throttle.hit(throttleKey, 8, 15 * 60 * 1000)) throw AppError.rateLimited();
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(and(sql`lower(${users.email}) = ${email}`, isNull(users.deletedAt)))
-      .limit(1);
+    // No tenant is known yet and `users` has FORCE RLS, so a plain SELECT here
+    // returns zero rows for every email when the app connects as a non-owner
+    // role — which is the production configuration. The lookup therefore goes
+    // through a SECURITY DEFINER function that returns only the two identifiers;
+    // the row itself is read afterwards, inside the tenant scope.
+    const scope = await resolveLoginScope(email);
 
-    if (!user || !verifyPassword(input.password, user.passwordHash)) {
+    const found = scope
+      ? await runTenant(scope.tenantId, async () => {
+          // Everything below runs on the RLS-scoped transaction. getDb() MUST be
+          // called inside the scope: hoisting the handle would query the pooled,
+          // unscoped connection (zero rows) and deadlock the embedded driver.
+          const tx = getDb();
+          const [user] = await tx.select().from(users).where(eq(users.id, scope.userId)).limit(1);
+          if (!user || !verifyPassword(input.password, user.passwordHash)) return null;
+          const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, scope.tenantId)).limit(1);
+          return { user, tenant: tenant ?? null };
+        })
+      : null;
+
+    if (!found) {
       await audit({
         action: "auth.login_failed",
         entity: "user",
-        entityId: user?.id ?? null,
-        tenantId: user?.tenantId ?? null,
+        entityId: scope?.userId ?? null,
+        tenantId: scope?.tenantId ?? null,
         after: { email },
         ...meta,
       });
       throw AppError.unauthorized("Email ou mot de passe incorrect");
     }
-    if (user.status !== "active") throw AppError.forbidden("Compte désactivé", "ACCOUNT_DISABLED");
 
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
+    const { user, tenant } = found;
+    if (user.status !== "active") throw AppError.forbidden("Compte désactivé", "ACCOUNT_DISABLED");
     if (!tenant || tenant.deletedAt || tenant.status === "suspended" || tenant.status === "inactive") {
       throw AppError.forbidden("Espace de travail indisponible", "TENANT_SUSPENDED");
     }
@@ -240,46 +264,55 @@ export class AuthService {
       };
     }
 
-    await db.update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, user.id));
     throttle.resetKey(throttleKey);
 
-    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenant.id)).limit(1);
-    await audit({ tenantId: tenant.id, actorId: user.id, action: "auth.login", entity: "user", entityId: user.id, ...meta });
-
-    return this.buildAuthResponse(user, tenant, settings ?? null, meta);
+    return runTenant(user.tenantId, async () => {
+      await getDb().update(users).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(users.id, user.id));
+      await audit({ tenantId: tenant.id, actorId: user.id, action: "auth.login", entity: "user", entityId: user.id, ...meta });
+      return this.buildAuthResponse(user, tenant, meta);
+    });
   }
 
   async refresh(input: RefreshInput, meta: Meta) {
-    const db = getDb();
     const tokenHash = hashToken(input.refreshToken);
-    const [session] = await db.select().from(sessions).where(eq(sessions.refreshTokenHash, tokenHash)).limit(1);
 
-    if (!session) throw AppError.unauthorized("Session expirée, veuillez vous reconnecter");
+    // `sessions` is RLS-protected and the tenant is only discoverable from the
+    // token, so this is another pre-tenant read. The hash is the credential and
+    // the function returns identifiers only.
+    const scope = await resolveRefreshScope(tokenHash);
+    if (!scope) throw AppError.unauthorized("Session expirée, veuillez vous reconnecter");
 
-    if (session.revokedAt) {
-      // Refresh-token reuse: the whole family is compromised.
-      await db
-        .update(sessions)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(sessions.familyId, session.familyId), isNull(sessions.revokedAt)));
-      throw AppError.unauthorized("Session révoquée, veuillez vous reconnecter");
-    }
-    if (session.expiresAt.getTime() <= Date.now()) throw AppError.unauthorized("Session expirée");
+    const result = await runTenant(scope.tenantId, async () => {
+      const tx = getDb();
+      const [session] = await tx.select().from(sessions).where(eq(sessions.id, scope.sessionId)).limit(1);
+      if (!session) throw AppError.unauthorized("Session expirée, veuillez vous reconnecter");
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(and(eq(users.id, session.userId), isNull(users.deletedAt)))
-      .limit(1);
-    if (!user || user.status !== "active") throw AppError.unauthorized("Compte indisponible");
+      if (session.revokedAt) {
+        // Refresh-token reuse: the whole family is compromised.
+        await tx
+          .update(sessions)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(sessions.familyId, session.familyId), isNull(sessions.revokedAt)));
+        throw AppError.unauthorized("Session révoquée, veuillez vous reconnecter");
+      }
+      if (session.expiresAt.getTime() <= Date.now()) throw AppError.unauthorized("Session expirée");
 
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
-    if (!tenant || tenant.deletedAt) throw AppError.unauthorized("Espace de travail indisponible");
+      const [user] = await tx
+        .select()
+        .from(users)
+        .where(and(eq(users.id, session.userId), isNull(users.deletedAt)))
+        .limit(1);
+      if (!user || user.status !== "active") throw AppError.unauthorized("Compte indisponible");
 
-    await db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, session.id));
+      const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
+      if (!tenant || tenant.deletedAt) throw AppError.unauthorized("Espace de travail indisponible");
 
-    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenant.id)).limit(1);
-    return this.buildAuthResponse(user, tenant, settings ?? null, meta, session.familyId);
+      await tx.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, session.id));
+
+      return this.buildAuthResponse(user, tenant, meta, session.familyId);
+    });
+
+    return result;
   }
 
   async logout(auth: { userId: string; tenantId: string }, input: LogoutInput, meta: Meta) {
@@ -331,56 +364,65 @@ export class AuthService {
   /* ------------------------------------------------------------------ */
 
   async forgotPassword(input: ForgotPasswordInput, meta: Meta) {
-    const db = getDb();
     const email = input.email.trim().toLowerCase();
     if (!throttle.hit(`forgot:${meta.ip ?? "unknown"}`, 5, 15 * 60 * 1000)) throw AppError.rateLimited();
 
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(and(sql`lower(${users.email}) = ${email}`, isNull(users.deletedAt)))
-      .limit(1);
+    // Pre-tenant read (see resolveLoginScope): the definer function yields only
+    // identifiers, so it cannot be used to look up arbitrary profile data.
+    const scope = await resolveLoginScope(email);
 
-    // Always the same answer: never disclose whether an account exists.
-    if (!user) return { success: true, message: "Si cet email existe, un lien de réinitialisation a été envoyé." };
+    // Everything that touches tenant rows — the user, the reset token and the
+    // outbox event — happens inside the scope, since all three are FORCE-RLS
+    // protected. Doing it outside would silently write nothing.
+    const queued = scope
+      ? await runTenant(scope.tenantId, async () => {
+          const tx = getDb();
+          const [user] = await tx.select().from(users).where(eq(users.id, scope.userId)).limit(1);
+          if (!user || user.deletedAt) return null;
 
-    const { token, hash } = newRefreshToken();
-    await db.insert(passwordResetTokens).values({
-      id: newId(),
-      userId: user.id,
-      tokenHash: hash,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-    });
-    await db.insert(outboxEvents).values({
-      id: newId(),
-      tenantId: user.tenantId,
-      type: "password.reset",
-      payload: { to: user.email, token, name: user.name },
-      status: "pending",
-    });
-    await audit({ tenantId: user.tenantId, actorId: user.id, action: "auth.password_reset_requested", entity: "user", entityId: user.id, ...meta });
+          const { token, hash } = newRefreshToken();
+          await tx.insert(passwordResetTokens).values({
+            id: newId(),
+            userId: user.id,
+            tokenHash: hash,
+            expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+          });
+          await tx.insert(outboxEvents).values({
+            id: newId(),
+            tenantId: user.tenantId,
+            type: "password.reset",
+            payload: { to: user.email, token, name: user.name },
+            status: "pending",
+          });
+          await audit({ tenantId: user.tenantId, actorId: user.id, action: "auth.password_reset_requested", entity: "user", entityId: user.id, ...meta });
+          return token;
+        })
+      : null;
 
     // The outbox worker delivers the email; the link is also logged for local/dev flows.
-    this.logger.log(`Password reset link: ${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${token}`);
+    if (queued) {
+      this.logger.log(`Password reset link: ${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${queued}`);
+    }
+    // Always the same answer: never disclose whether an account exists.
     return { success: true, message: "Si cet email existe, un lien de réinitialisation a été envoyé." };
   }
 
   async resetPassword(input: ResetPasswordInput, meta: Meta) {
-    const db = getDb();
     const issues = passwordIssues(input.password);
     if (issues.length) throw AppError.badRequest(issues[0]);
 
-    const [row] = await db
-      .select()
-      .from(passwordResetTokens)
-      .where(eq(passwordResetTokens.tokenHash, hashToken(input.token)))
-      .limit(1);
-    if (!row || row.usedAt || row.expiresAt.getTime() <= Date.now()) {
+    // The token hash is the credential; the function returns identifiers only.
+    const scope = await resolvePasswordResetScope(hashToken(input.token));
+    if (!scope || scope.usedAt || scope.expiresAt.getTime() <= Date.now()) {
       throw AppError.badRequest("Lien de réinitialisation invalide ou expiré");
     }
+    const row = { id: scope.tokenId, userId: scope.userId };
 
     const now = new Date();
-    await db.transaction(async (tx) => {
+    // One tenant scope: `runTenant` already opens the transaction, so the three
+    // writes commit or roll back together and no nested `begin` is needed.
+    await runTenant(scope.tenantId, async () => {
+      const tx = getDb();
       await tx
         .update(users)
         .set({ passwordHash: hashPassword(input.password), tokenVersion: sql`${users.tokenVersion} + 1`, updatedAt: now })
@@ -392,7 +434,13 @@ export class AuthService {
         .where(and(eq(sessions.userId, row.userId), isNull(sessions.revokedAt)));
     });
 
-    await audit({ action: "auth.password_reset", entity: "user", entityId: row.userId, ...meta });
+    await audit({
+      action: "auth.password_reset",
+      entity: "user",
+      entityId: row.userId,
+      tenantId: scope.tenantId,
+      ...meta,
+    });
     return { success: true, message: "Mot de passe mis à jour. Vous pouvez vous connecter." };
   }
 
@@ -617,11 +665,14 @@ export class AuthService {
     }
 
     const db = getDb();
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(and(eq(users.id, subject), isNull(users.deletedAt)))
-      .limit(1);
+    // The challenge token proves identity but carries no tenant, so the user is
+    // re-read through the same pre-tenant helper used by login.
+    const subjectUser = await resolveLoginScopeById(subject);
+    const [user] = subjectUser
+      ? await runTenant(subjectUser.tenantId, async () =>
+          getDb().select().from(users).where(and(eq(users.id, subject), isNull(users.deletedAt))).limit(1),
+        )
+      : [];
     if (!user || user.status !== "active" || !user.mfaEnabled || !user.mfaSecret) {
       throw AppError.unauthorized("Vérification impossible, reconnectez-vous.");
     }
@@ -641,36 +692,46 @@ export class AuthService {
     }
     throttle.resetKey(throttleKey);
 
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
-    if (!tenant || tenant.deletedAt || tenant.status === "suspended" || tenant.status === "inactive") {
-      throw AppError.forbidden("Espace de travail indisponible", "TENANT_SUSPENDED");
-    }
+    return runTenant(user.tenantId, async () => {
+      const tx = getDb();
+      const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
+      if (!tenant || tenant.deletedAt || tenant.status === "suspended" || tenant.status === "inactive") {
+        throw AppError.forbidden("Espace de travail indisponible", "TENANT_SUSPENDED");
+      }
 
-    await db
-      .update(users)
-      .set({ lastLoginAt: new Date(), mfaLastUsedAt: new Date(), updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenant.id)).limit(1);
-    await audit({
-      tenantId: tenant.id,
-      actorId: user.id,
-      action: "auth.mfa_login",
-      entity: "user",
-      entityId: user.id,
-      ...meta,
+      await tx
+        .update(users)
+        .set({ lastLoginAt: new Date(), mfaLastUsedAt: new Date(), updatedAt: new Date() })
+        .where(eq(users.id, user.id));
+      await audit({
+        tenantId: tenant.id,
+        actorId: user.id,
+        action: "auth.mfa_login",
+        entity: "user",
+        entityId: user.id,
+        ...meta,
+      });
+
+      return this.buildAuthResponse(user, tenant, meta);
     });
-
-    return this.buildAuthResponse(user, tenant, settings ?? null, meta);
   }
 
+  /**
+   * Issues the session and the token pair.
+   *
+   * MUST be called inside `runTenant(tenant.id, ...)`: it reads `tenant_settings`
+   * and inserts into `sessions`, both of which are FORCE-RLS protected. That is
+   * also why the settings are loaded here instead of being passed in — every
+   * caller would otherwise have to remember to fetch them in the right scope.
+   */
   private async buildAuthResponse(
     user: typeof users.$inferSelect,
     tenant: typeof tenants.$inferSelect,
-    settings: typeof tenantSettings.$inferSelect | null,
     meta: Meta,
     familyId?: string,
   ) {
     const db = getDb();
+    const [settings] = await db.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenant.id)).limit(1);
     const { token: refreshToken, hash } = newRefreshToken();
     await db.insert(sessions).values({
       id: newId(),
@@ -694,7 +755,7 @@ export class AuthService {
       token,
       refreshToken,
       user: serializeUser(user),
-      tenant: serializeTenant(tenant, settings),
+      tenant: serializeTenant(tenant, settings ?? null),
       permissions: permissionsFor(user.role),
       mfaEnabled: user.mfaEnabled,
     };

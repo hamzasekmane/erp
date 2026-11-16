@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "../db/client";
+import { currentTenantId, getDb } from "../db/client";
 import { auditLogs } from "../db/schema";
 import { newId } from "./ids";
 
@@ -40,6 +40,14 @@ export type AuditInput = {
  */
 export async function audit(input: AuditInput): Promise<void> {
   if (!input.tenantId) {
+    await getDb().insert(auditLogs).values(rowOf(input));
+    return;
+  }
+  // Already inside that tenant's scope: the setting is in force for the whole
+  // surrounding transaction, so opening another one is both unnecessary and
+  // harmful — a nested `begin` on the pinned connection would commit the
+  // caller's transaction early, before the business writes are done.
+  if (currentTenantId() === input.tenantId) {
     await getDb().insert(auditLogs).values(rowOf(input));
     return;
   }
