@@ -11,15 +11,6 @@ export default function PaymentFilters() {
   const [isPending, startTransition] = useTransition();
   const [query, setQuery] = useState(searchParams.get("search") || "");
 
-  // Debounce: انتظر 300ms بعد توقف المستخدم عن الكتابة قبل تحديث البحث
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      handleSearch(query);
-    }, 300);
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [query]);
-
   const handleSearch = (term: string) => {
     const params = new URLSearchParams(searchParams);
     if (term) {
@@ -32,6 +23,16 @@ export default function PaymentFilters() {
       router.replace(`${pathname}?${params.toString()}`);
     });
   };
+
+  // Debounce: انتظر 300ms بعد توقف المستخدم عن الكتابة قبل تحديث البحث
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      handleSearch(query);
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [query]);
+
 
   return (
     <div className="flex flex-col md:flex-row gap-4 w-full">

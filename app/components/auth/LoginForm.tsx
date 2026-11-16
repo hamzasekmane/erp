@@ -12,13 +12,15 @@ const initialState: any = { success: false, message: "", errors: {} };
 export default function LoginForm() {
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
   const [mfaState, mfaFormAction, mfaPending] = useActionState(mfaVerifyAction, initialState);
-  const [challenge, setChallenge] = useState<string>("");
+  // Derived, not stored: the challenge token is a pure function of the action
+  // results. Keeping it in state meant a synchronous setState inside an effect,
+  // which forces a second render before the first one has committed.
+  const challenge = state?.challengeToken ?? mfaState?.challengeToken ?? "";
   const router = useRouter();
 
   const mfaRequired = Boolean(mfaState?.mfaRequired || state?.mfaRequired);
 
   useEffect(() => {
-    if (state?.challengeToken) setChallenge(state.challengeToken);
     if (state?.success || mfaState?.success) {
       toast.success("Authentification réussie. Bienvenue sur Velora.");
       router.push("/dashboard");
@@ -29,7 +31,7 @@ export default function LoginForm() {
   }, [state, mfaState, router]);
 
   useEffect(() => {
-    if (mfaState?.challengeToken) setChallenge(mfaState.challengeToken);
+    // Only the toast is an effect: it is a side effect, unlike the token above.
     if (mfaState?.message && mfaRequired) toast.error(mfaState.message);
   }, [mfaState, mfaRequired]);
 

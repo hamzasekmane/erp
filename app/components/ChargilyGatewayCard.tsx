@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore, useState } from "react";
 import { AlertCircle, CheckCircle, Copy, CreditCard, Loader2, Save, ShieldCheck } from "lucide-react";
 import { apiBaseUrl } from "@/app/lib/apiBase";
+
+const noopSubscribe = () => () => {};
 
 type ChargilyStatus = {
   configured: boolean;
@@ -32,11 +34,14 @@ export default function ChargilyGatewayCard({ token, initialStatus }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [origin, setOrigin] = useState("");
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
+  // Read from the browser only after hydration. `useSyncExternalStore` keeps the
+  // server snapshot empty and the client snapshot stable, which is what the
+  // former `useEffect(() => setOrigin(...), [])` was emulating with an extra render.
+  const origin = useSyncExternalStore(
+    noopSubscribe,
+    () => window.location.origin,
+    () => "",
+  );
 
   const webhookUrl = `${origin}${status.webhookPath}`;
 

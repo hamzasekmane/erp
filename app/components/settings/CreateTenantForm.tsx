@@ -61,7 +61,7 @@ interface FormData {
 export function CreateTenantForm({ token }: CreateTenantFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<FormData>(() => ({
     name: "",
     subdomain: "",
     email: "",
@@ -82,7 +82,7 @@ export function CreateTenantForm({ token }: CreateTenantFormProps) {
       timezone: "Europe/Paris",
       currency: "EUR"
     }
-  });
+  }));
 
   const plans = [
     { value: "starter", label: "Starter", price: "29€/mois", users: 5, storage: 1 },

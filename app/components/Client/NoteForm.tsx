@@ -38,18 +38,6 @@ export default function NoteForm({ clients, initialData, mode = "create", noteId
     isPinned: initialData?.isPinned || false,
   });
 
-  // Mettre à jour le formulaire si initialData change
-  useEffect(() => {
-    if (initialData) {
-      setFormData({
-        clientId: getClientId(initialData.clientId),
-        title: initialData.title || "",
-        content: initialData.content || "",
-        category: initialData.category || "general",
-        isPinned: initialData.isPinned || false,
-      });
-    }
-  }, [initialData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

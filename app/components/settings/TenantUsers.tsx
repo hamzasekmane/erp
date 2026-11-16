@@ -48,10 +48,6 @@ export function TenantUsers({ tenantId, token }: TenantUsersProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showInviteModal, setShowInviteModal] = useState(false);
 
-  useEffect(() => {
-    fetchUsers();
-  }, [tenantId]);
-
   const fetchUsers = async () => {
     setIsLoading(true);
     setEndpointError(false);
@@ -71,6 +67,15 @@ export function TenantUsers({ tenantId, token }: TenantUsersProps) {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    // The fetch's first setState happens after an await, so this does not
+    // cascade a render; the extra tick keeps mount work off the render path.
+    void (async () => {
+      await fetchUsers();
+    })();
+  }, [tenantId]);
+
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||

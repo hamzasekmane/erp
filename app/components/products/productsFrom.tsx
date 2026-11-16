@@ -59,11 +59,14 @@ export default function ProductForm({
   const [selectedTaxId, setSelectedTaxId] = useState(initialData?.taxId?._id || initialData?.taxId || "");
 
   // Memoized action
-  const actionWithId = useMemo(() => 
-    isEditing && initialData?._id 
-      ? updateProductAction.bind(null, initialData._id) 
+  // Depend on `initialData` itself, not `initialData?._id`: the compiler infers
+  // the whole object as the dependency, and a narrower list would let the bound
+  // action go stale when the id changes.
+  const actionWithId = useMemo(() =>
+    isEditing && initialData?._id
+      ? updateProductAction.bind(null, initialData._id)
       : createProductAction,
-    [isEditing, initialData?._id]
+    [isEditing, initialData]
   );
 
   const [state, formAction, isPending] = useActionState<FormState, FormData>(
