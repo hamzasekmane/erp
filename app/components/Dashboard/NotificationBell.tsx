@@ -348,15 +348,6 @@ export default function NotificationBell({
     });
   };
 
-  // ============== CONNECTION STATUS ==============
-  const ConnectionStatus = () => (
-    <div className="absolute -bottom-1 -right-1">
-      <div className={`w-2.5 h-2.5 rounded-full ${
-        isConnected ? 'bg-emerald-500' : 'bg-red-500'
-      } ring-2 ring-[var(--background)] ${isConnected ? 'animate-pulse' : ''}`} />
-    </div>
-  );
-
   // ============== RENDER ==============
   return (
     <div className="relative" ref={dropdownRef}>
@@ -374,7 +365,7 @@ export default function NotificationBell({
           <Bell size={20} className={`transition-all duration-300 ${
             isOpen ? 'text-[var(--accent)] scale-110' : 'text-[var(--foreground-muted)] group-hover:text-[var(--foreground)]'
           }`} />
-          <ConnectionStatus />
+          <ConnectionStatus connected={isConnected} />
           
           {count > 0 && (
             <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-rose-600 text-[9px] font-black text-white ring-2 ring-[var(--background)] shadow-lg shadow-rose-500/30 animate-in zoom-in duration-300">
@@ -582,6 +573,20 @@ export default function NotificationBell({
           </a>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Hoisted out of NotificationBell: declaring it inside the parent made it a new
+ * component type on every render, so React remounted it constantly.
+ */
+function ConnectionStatus({ connected }: { connected: boolean }) {
+  return (
+    <div className="absolute -bottom-1 -right-1">
+      <div className={`w-2.5 h-2.5 rounded-full ${
+        connected ? 'bg-emerald-500' : 'bg-red-500'
+      } ring-2 ring-[var(--background)] ${connected ? 'animate-pulse' : ''}`} />
     </div>
   );
 }

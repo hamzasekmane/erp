@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useIsMounted } from '@/app/hooks/useIsMounted';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useTheme } from 'next-themes';
 import { TrendingUp, BarChart3 } from 'lucide-react';
@@ -24,10 +24,8 @@ export default function DashboardCharts({
   height = 200,
   showComparison = true 
 }: DashboardChartsProps) {
-  const [isClient, setIsClient] = useState(false);
+  const isClient = useIsMounted();
   const { resolvedTheme } = useTheme();
-
-  useEffect(() => setIsClient(true), []);
 
   // Skeleton loading (compact)
   if (!isClient) {

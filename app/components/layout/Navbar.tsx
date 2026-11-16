@@ -1,5 +1,6 @@
 "use client";
 
+import { useIsMounted } from '@/app/hooks/useIsMounted';
 import { usePathname } from "next/navigation";
 import {
   Sun,
@@ -32,13 +33,19 @@ interface NavbarProps {
 export default function Navbar({ user }: NavbarProps) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useIsMounted();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Fermer le menu mobile lors du changement de route
-  useEffect(() => {
+  // Fermer le menu mobile lors du changement de route.
+  //
+  // Tracked during render (React's documented "adjust state when a prop changes"
+  // pattern) instead of in an effect: an effect would render the old route's menu
+  // first, then immediately re-render it closed.
+  const [menuPathname, setMenuPathname] = useState(pathname);
+  if (menuPathname !== pathname) {
+    setMenuPathname(pathname);
     setIsMobileMenuOpen(false);
-  }, [pathname]);
+  }
 
   // Empêcher le scroll du body quand le menu est ouvert
   useEffect(() => {
@@ -66,10 +73,6 @@ export default function Navbar({ user }: NavbarProps) {
   const segments = pathname
     .split("/")
     .filter((item) => item !== "" && item !== "dashboard");
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === "dark" ? "light" : "dark");

@@ -26,8 +26,41 @@ export default function QuickActionCard({
     amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 hover:bg-amber-600 hover:text-white'
   };
 
-  const CardContent = () => (
-    <div className={`p-5 rounded-xl ${colorClasses[color]} transition-all cursor-pointer flex items-center gap-4 group`}>
+  const content = <CardContent className={colorClasses[color]} icon={icon} title={title} description={description} />;
+
+  if (onClick) {
+    return (
+      <div onClick={onClick} className="cursor-pointer">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={href} className="block">
+      {content}
+    </Link>
+  );
+}
+
+/**
+ * Hoisted out of QuickActionCard: a component declared inside another
+ * component's body is a NEW type on every render, so React unmounts and
+ * remounts its subtree each time and any state inside it is lost.
+ */
+function CardContent({
+  className,
+  icon,
+  title,
+  description,
+}: {
+  className: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className={`p-5 rounded-xl ${className} transition-all cursor-pointer flex items-center gap-4 group`}>
       <div className="p-2 rounded-lg bg-white/20 group-hover:scale-110 transition-transform">
         {icon}
       </div>
@@ -36,19 +69,5 @@ export default function QuickActionCard({
         <p className="text-[8px] opacity-70 mt-1">{description}</p>
       </div>
     </div>
-  );
-
-  if (onClick) {
-    return (
-      <div onClick={onClick} className="cursor-pointer">
-        <CardContent />
-      </div>
-    );
-  }
-
-  return (
-    <Link href={href} className="block">
-      <CardContent />
-    </Link>
   );
 }
