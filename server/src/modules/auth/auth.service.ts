@@ -93,7 +93,15 @@ export class AuthService {
     const issues = passwordIssues(input.userData.password);
     if (issues.length) throw AppError.badRequest(issues[0]);
 
-    const planCode = (input.planCode ?? "trial").toLowerCase();
+    const rawPlanCode = (input.planCode ?? "trial").toLowerCase();
+    const planAliases: Record<string, string> = {
+      free: "trial",
+      essai: "trial",
+      pro: "professional",
+      scale: "professional",
+      growth: "enterprise",
+    };
+    const planCode = planAliases[rawPlanCode] ?? rawPlanCode;
     const [plan] = await db.select().from(plans).where(eq(plans.code, planCode)).limit(1);
     if (!plan) throw AppError.badRequest("Formule d'abonnement inconnue");
 

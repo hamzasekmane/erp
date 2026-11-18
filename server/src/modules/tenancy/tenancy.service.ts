@@ -182,7 +182,16 @@ export class TenancyService {
 
   async changePlan(ctx: Ctx, input: ChangeSubscriptionInput) {
     const db = getDb();
-    const [plan] = await db.select().from(plans).where(eq(plans.code, input.planCode)).limit(1);
+    const rawPlanCode = input.planCode.toLowerCase();
+    const planAliases: Record<string, string> = {
+      free: "trial",
+      essai: "trial",
+      pro: "professional",
+      scale: "professional",
+      growth: "enterprise",
+    };
+    const planCode = planAliases[rawPlanCode] ?? rawPlanCode;
+    const [plan] = await db.select().from(plans).where(eq(plans.code, planCode)).limit(1);
     if (!plan) throw AppError.notFound("Formule introuvable");
 
     const [tenant] = await db.select().from(tenants).where(eq(tenants.id, ctx.tenantId)).limit(1);

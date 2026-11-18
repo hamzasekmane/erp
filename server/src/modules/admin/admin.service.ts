@@ -84,7 +84,15 @@ export class AdminService {
   ) {
     this.assertSuperadmin(ctx);
     const db = getDb();
-    const planCode = input.planCode ?? "trial";
+    const rawPlanCode = (input.planCode ?? "trial").toLowerCase();
+    const planAliases: Record<string, string> = {
+      free: "trial",
+      essai: "trial",
+      pro: "professional",
+      scale: "professional",
+      growth: "enterprise",
+    };
+    const planCode = planAliases[rawPlanCode] ?? rawPlanCode;
     const [plan] = await db.select().from(plans).where(eq(plans.code, planCode)).limit(1);
     if (!plan) throw AppError.badRequest("Formule inconnue");
 
