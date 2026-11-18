@@ -17,7 +17,18 @@ export async function registerAction(_prevState: any, formData: FormData) {
     };
   }
 
-  const selectedPlan = formData.get("planCode") as string || "free";
+  const rawPlan = (formData.get("planCode") as string) || "trial";
+  const planMap: Record<string, string> = {
+    free: "trial",
+    essai: "trial",
+    starter: "starter",
+    pro: "professional",
+    professional: "professional",
+    scale: "professional",
+    growth: "enterprise",
+    enterprise: "enterprise",
+  };
+  const selectedPlan = planMap[rawPlan.toLowerCase()] || rawPlan;
 
   // Construction du payload avec valeurs par défaut (déjà dans le schéma)
   const payload = {
@@ -107,10 +118,19 @@ export async function registerAction(_prevState: any, formData: FormData) {
 
   } catch (error: any) {
     console.error("❌ Erreur critique:", error);
+    const isConnRefused =
+      error?.cause?.code === "ECONNREFUSED" ||
+      error?.cause?.errors?.some?.((e: any) => e.code === "ECONNREFUSED") ||
+      error?.message === "fetch failed";
+
+    const message = isConnRefused
+      ? "Impossible de contacter le serveur backend (port 4000). Veuillez vous assurer que l'API est démarrée."
+      : error.message || "Erreur de connexion au serveur.";
+
     return {
       success: false,
       errors: {},
-      message: error.message || "Erreur de connexion au serveur.",
+      message,
       backendErrors: []
     };
   }
